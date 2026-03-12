@@ -1104,6 +1104,8 @@ const ProductSearchViewComponent = ({ products, categories }: { products: Produc
   const [filterCategory, setFilterCategory] = useState('Todas');
   const [filterSize, setFilterSize] = useState('');
   const [filterColor, setFilterColor] = useState('');
+  const [summaryModal, setSummaryModal] = useState(false);
+  const [summaryText, setSummaryText] = useState('');
 
   const sortedCategories = useMemo(() => { 
     return [...categories].sort((a, b) => { 
@@ -1136,6 +1138,29 @@ const ProductSearchViewComponent = ({ products, categories }: { products: Produc
     });
   }, [products, search, isExact, filterCategory, filterSize, filterColor]);
 
+  const generateWppSummary = () => {
+    if (filteredProducts.length === 0) {
+      alert('Nenhum produto visível para gerar resumo!');
+      return;
+    }
+    const now = new Date().toLocaleDateString();
+    let text = `📦 *PEÇAS - ${now}*\n`;
+    text += `--------------------------------\n`;
+    filteredProducts.forEach((p: Product) => {
+      text += `*${p.name}* | Qld: ${p.size || '-'} | _R$ ${formatCurrency(p.price)}_\n`;
+    });
+    text += `--------------------------------\n`;
+    text += `*LM PARTS*\n`;
+    
+    setSummaryText(text);
+    setSummaryModal(true);
+  };
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(summaryText);
+    alert('Resumo copiado para a área de transferência!');
+  };
+
   return (
     <div className="space-y-6 h-full flex flex-col min-h-0 animate-in fade-in">
        <div className="flex justify-between items-end">
@@ -1143,13 +1168,18 @@ const ProductSearchViewComponent = ({ products, categories }: { products: Produc
             <h2 className="text-2xl font-black text-zinc-900 tracking-tighter uppercase italic">Consulta de Produtos</h2>
             <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Verificação rápida de preço e estoque</p>
           </div>
-          <button 
-            onClick={() => setIsExact(!isExact)} 
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl border-2 transition-all font-black text-[10px] uppercase tracking-widest ${isExact ? 'bg-red-600 border-red-600 text-white shadow-lg' : 'bg-white border-zinc-200 text-zinc-400 hover:border-red-300'}`}
-          >
-            <Target size={14} className={isExact ? 'animate-pulse' : ''} />
-            {isExact ? 'Busca Exata Ativa' : 'Ativar Busca Exata'}
-          </button>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => setIsExact(!isExact)} 
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl border-2 transition-all font-black text-[10px] uppercase tracking-widest ${isExact ? 'bg-red-600 border-red-600 text-white shadow-lg' : 'bg-white border-zinc-200 text-zinc-400 hover:border-red-300'}`}
+            >
+              <Target size={14} className={isExact ? 'animate-pulse' : ''} />
+              {isExact ? 'Exato' : 'Exato'}
+            </button>
+            <button type="button" onClick={generateWppSummary} className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-black flex items-center gap-2 shadow-lg active:scale-95 text-[10px] uppercase">
+              <Share2 size={16}/> Resumo WhatsApp
+            </button>
+          </div>
        </div>
        
        <div className="bg-white p-6 rounded-2xl border border-zinc-200 shadow-sm space-y-4 shrink-0">
@@ -1238,6 +1268,34 @@ const ProductSearchViewComponent = ({ products, categories }: { products: Produc
             </table>
           </div>
        </div>
+
+       {summaryModal && (
+        <div className="fixed inset-0 flex items-center justify-center p-6 z-[100] animate-in fade-in bg-zinc-900/40 backdrop-blur-sm">
+          <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-xl shadow-2xl space-y-6 flex flex-col relative">
+            <div className="flex justify-between items-center border-b pb-4 shrink-0">
+               <h3 className="text-xl font-black text-zinc-900 uppercase italic flex items-center gap-2">
+                 <Share2 size={24} className="text-emerald-600" /> Resumo WhatsApp
+               </h3>
+               <button type="button" onClick={() => setSummaryModal(false)} className="text-zinc-300 hover:text-zinc-500 transition-colors"><X size={24}/></button>
+            </div>
+            
+            <div className="flex-1 overflow-hidden flex flex-col gap-4">
+              <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Conteúdo do Resumo (Filtrado)</p>
+              <textarea 
+                readOnly
+                className="w-full flex-1 border-2 rounded-2xl p-6 text-sm font-mono bg-zinc-50 focus:outline-none custom-scroll resize-none leading-relaxed focus:border-emerald-500"
+                value={summaryText}
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4 border-t shrink-0">
+              <button type="button" onClick={copyToClipboard} className="w-full py-4 bg-emerald-600 text-white font-black uppercase text-[10px] rounded-xl flex items-center justify-center gap-2 shadow-xl hover:bg-emerald-700 transition-all active:scale-95">
+                <Copy size={16} /> Copiar para WhatsApp
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
