@@ -1147,7 +1147,7 @@ const ProductSearchViewComponent = ({ products, categories }: { products: Produc
     let text = `📦 *PEÇAS - ${now}*\n`;
     text += `--------------------------------\n`;
     filteredProducts.forEach((p: Product) => {
-      text += `*${p.name}* | Qld: ${p.size || '-'} | _R$ ${formatCurrency(p.price)}_\n`;
+      text += `*${p.sku}* - *${p.name}* | Qld: ${p.size || '-'} | R$ ${formatCurrency(p.price)}\n`;
     });
     text += `--------------------------------\n`;
     text += `*LM PARTS*\n`;
@@ -1270,7 +1270,7 @@ const ProductSearchViewComponent = ({ products, categories }: { products: Produc
        </div>
 
        {summaryModal && (
-        <div className="fixed inset-0 flex items-center justify-center p-6 z-[100] animate-in fade-in bg-zinc-900/40 backdrop-blur-sm">
+        <div className="fixed inset-0 flex items-center justify-center p-6 z-[200] animate-in fade-in bg-slate-900/40 backdrop-blur-sm">
           <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-xl shadow-2xl space-y-6 flex flex-col relative">
             <div className="flex justify-between items-center border-b pb-4 shrink-0">
                <h3 className="text-xl font-black text-zinc-900 uppercase italic flex items-center gap-2">
@@ -2688,10 +2688,10 @@ const StockManagementView = ({ products, setProducts, categories, setCategories 
       return;
     }
     const now = new Date().toLocaleDateString();
-    let text = `📦 *PEÇAS - ${now}*\n`;
+    let text = `📦 *RESUMO DE ESTOQUE - ${now}*\n`;
     text += `--------------------------------\n`;
     filteredProducts.forEach((p: Product) => {
-      text += `*${p.name}* | Qld: ${p.size || '-'} | _R$ ${formatCurrency(p.price)}_\n`;
+      text += `*${p.sku}* - *${p.name}* | Qld: ${p.size || '-'} | Qtd: ${p.stock}\n`;
     });
     text += `--------------------------------\n`;
     text += `*LM PARTS*\n`;
@@ -2884,7 +2884,7 @@ const StockManagementView = ({ products, setProducts, categories, setCategories 
       )}
 
       {summaryModal && (
-        <div className="fixed inset-0 flex items-center justify-center p-6 z-[100] animate-in fade-in bg-zinc-900/40 backdrop-blur-sm">
+        <div className="fixed inset-0 flex items-center justify-center p-6 z-[200] animate-in fade-in bg-slate-900/40 backdrop-blur-sm">
           <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-xl shadow-2xl space-y-6 flex flex-col relative">
             <div className="flex justify-between items-center border-b pb-4 shrink-0">
                <h3 className="text-xl font-black text-zinc-900 uppercase italic flex items-center gap-2">
