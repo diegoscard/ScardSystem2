@@ -1144,13 +1144,12 @@ const ProductSearchViewComponent = ({ products, categories }: { products: Produc
       return;
     }
     const now = new Date().toLocaleDateString();
-    let text = `📦 *PEÇAS - ${now}*\n`;
+    let text = `📦 *PEÇAS*\n`;
     text += `--------------------------------\n`;
     filteredProducts.forEach((p: Product) => {
       text += `*${p.sku}* - *${p.name}* | Qld: ${p.size || '-'} | R$ ${formatCurrency(p.price)}\n`;
     });
     text += `--------------------------------\n`;
-    text += `*LM PARTS*\n`;
     
     setSummaryText(text);
     setSummaryModal(true);
@@ -2640,10 +2639,11 @@ const StockManagementView = ({ products, setProducts, categories, setCategories 
     setForm((prev: any) => ({ ...prev, cost, price, markup: newMarkup }));
   }, []);
   const generateRandomSku = () => {
-    const code = Math.floor(100000 + Math.random() * 900000);
-    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const randomLetters = letters[Math.floor(Math.random() * letters.length)] + letters[Math.floor(Math.random() * letters.length)];
-    setForm({ ...form, sku: `${code}${randomLetters}` });
+    // Gera apenas um número de 5 dígitos
+    const code = Math.floor(10000 + Math.random() * 90000);
+    
+    // Salva apenas o número gerado
+    setForm({ ...form, sku: `${code}` });
   };
   const handleClone = (p: Product) => {
     setForm({ ...p, id: undefined, sku: '' });
@@ -2688,13 +2688,12 @@ const StockManagementView = ({ products, setProducts, categories, setCategories 
       return;
     }
     const now = new Date().toLocaleDateString();
-    let text = `📦 *RESUMO DE ESTOQUE - ${now}*\n`;
+    let text = `📦 *RESUMO DE ESTOQUE*\n`;
     text += `--------------------------------\n`;
     filteredProducts.forEach((p: Product) => {
       text += `*${p.sku}* - *${p.name}* | Qld: ${p.size || '-'} | Qtd: ${p.stock}\n`;
     });
     text += `--------------------------------\n`;
-    text += `*LM PARTS*\n`;
     
     setSummaryText(text);
     setSummaryModal(true);
