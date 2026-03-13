@@ -11,7 +11,7 @@ import {
   History, Clock, UserCheck, RotateCcw, Award, Zap, Calculator, Trophy, Star, Medal,
   ChevronLeft, ChevronRight, ListOrdered, Download, Upload, Save, FileWarning,
   Megaphone, CalendarDays, CheckCircle2, TicketPercent, Gift, ShieldCheck as ShieldIcon,
-  Printer, Check, Key, Shield, Monitor, UserPlus, HandCoins, Share2, FileText, Target
+  Printer, Check, Key, Shield, Monitor, UserPlus, HandCoins, Share2, FileText, Target, Cake
 } from 'lucide-react';
 
 // --- CONFIGURAÇÃO DE SEGURANÇA (CHAVES DE ACESSO) ---
@@ -52,6 +52,19 @@ const parseCurrency = (val: string) => {
 // --- DEFINIÇÃO DE TIPOS ---
 
 type UserRole = 'admin' | 'atendente';
+
+interface Customer {
+  id: number;
+  name: string;
+  document: string; // CPF ou CNPJ
+  email: string;
+  phone: string;
+  address: string;
+  birthDate: string; // DD/MM/YYYY
+  createdAt: string;
+  totalSpent: number;
+  lastPurchase?: string;
+}
 
 interface User {
   id: number;
@@ -191,6 +204,8 @@ interface Sale {
   items: SaleItem[];
   change: number; 
   exchangeCreditUsed?: number; 
+  customerId?: number;
+  customerName?: string;
 }
 
 interface Supplier {
@@ -398,11 +413,20 @@ const App = () => {
     setAuthMode('login');
   };
 
+  const [customers, setCustomers] = useState<Customer[]>(() => {
+    const saved = localStorage.getItem('db_customers');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('db_customers', JSON.stringify(customers));
+  }, [customers]);
+
   const handleExportBackup = () => {
     const dataKeys = [
       'db_users', 'db_products', 'db_suppliers', 'db_categories', 
       'db_movements', 'db_sales', 'db_cash_session', 'db_cash_history', 
-      'db_settings', 'db_exchange_credit', 'db_campaigns', 'db_key_registrations', 'db_fiados'
+      'db_settings', 'db_exchange_credit', 'db_campaigns', 'db_key_registrations', 'db_fiados', 'db_customers'
     ];
     
     const backupData: Record<string, any> = {};
@@ -676,6 +700,7 @@ const App = () => {
         
         <nav className="flex-1 px-4 space-y-1 overflow-y-auto custom-scroll">
           <NavBtn active={currentView === 'sales'} onClick={() => setCurrentView('sales')} icon={<ShoppingCart size={18}/>} label="Caixa PDV" />
+          <NavBtn active={currentView === 'customers'} onClick={() => setCurrentView('customers')} icon={<Users size={18}/>} label="Clientes" />
           <NavBtn active={currentView === 'product_search'} onClick={() => setCurrentView('product_search')} icon={<Search size={18}/>} label="Consultar" />
           <NavBtn active={currentView === 'reports'} onClick={() => setCurrentView('reports')} icon={<TrendingUp size={18}/>} label="Relatórios" />
           {hasPermission('stock') && <NavBtn active={currentView === 'stock'} onClick={() => setCurrentView('stock')} icon={<Package size={18}/>} label="Estoque" />}
@@ -769,8 +794,18 @@ const App = () => {
                 setCampaigns={setCampaigns}
                 fiados={fiados}
                 setFiados={setFiados}
+                customers={customers}
+                setCustomers={setCustomers}
+                setCurrentView={setCurrentView}
               />
             )
+          )}
+          {currentView === 'customers' && (
+            <CustomerManagementView 
+              customers={customers} 
+              setCustomers={setCustomers} 
+              sales={sales}
+            />
           )}
           {currentView === 'product_search' && (
             <ProductSearchViewComponent products={products} categories={categories} />
@@ -1614,9 +1649,301 @@ const CampaignsViewComponent = ({ campaigns, setCampaigns, products }: { campaig
   );
 };
 
-// --- COMPONENTE PDV ---
+const maskCPFCNPJ = (value: string) => {
+  const v = value.replace(/\D/g, '');
+  if (v.length <= 11) {
+    return v.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+  } else {
+    return v.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+  }
+};
 
-const SalesViewComponent = ({ user, products, setProducts, setSales, setMovements, vendedores, cashSession, setCashSession, settings, exchangeCredit, setExchangeCredit, campaigns, setCampaigns, fiados, setFiados }: any) => {
+const maskPhone = (value: string) => {
+  const v = value.replace(/\D/g, '');
+  if (v.length <= 10) {
+    return v.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
+  } else {
+    return v.replace(/(\d{2})(\d{1})(\d{4})(\d{4})/, '($1) $2 $3-$4');
+  }
+};
+
+const maskDate = (value: string) => {
+  const v = value.replace(/\D/g, '');
+  return v.replace(/(\d{2})(\d{2})(\d{4})/, '$1/$2/$3');
+};
+
+
+const CustomerManagementView = ({ customers, setCustomers, sales }: any) => {
+  const [modal, setModal] = useState(false);
+  const [showBirthdays, setShowBirthdays] = useState(false);
+  const [form, setForm] = useState<any>({ name: '', document: '', email: '', phone: '', address: '', birthDate: '' });
+  const [search, setSearch] = useState('');
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+
+  const isBirthdayToday = (birthDate: string) => {
+    if (!birthDate) return false;
+    const today = new Date();
+    const [day, month] = birthDate.split('/');
+    return parseInt(day) === today.getDate() && parseInt(month) === today.getMonth() + 1;
+  };
+
+  const filtered = customers.filter((c: Customer) => {
+    const matchesSearch = c.name.toLowerCase().includes(search.toLowerCase()) || 
+                          c.document.includes(search) ||
+                          c.phone.includes(search);
+    if (showBirthdays) return matchesSearch && isBirthdayToday(c.birthDate);
+    return matchesSearch;
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (form.id) {
+      setCustomers(customers.map((c: Customer) => c.id === form.id ? { ...c, ...form } : c));
+    } else {
+      const newCustomer: Customer = {
+        ...form,
+        id: Date.now(),
+        createdAt: new Date().toISOString(),
+        totalSpent: 0
+      };
+      setCustomers([newCustomer, ...customers]);
+    }
+    setModal(false);
+    setForm({ name: '', document: '', email: '', phone: '', address: '' });
+  };
+
+  const handleDelete = (id: number) => {
+    if (window.confirm('Deseja realmente excluir este cliente?')) {
+      setCustomers(customers.filter((c: Customer) => c.id !== id));
+    }
+  };
+
+  const getCustomerSales = (customerId: number) => {
+    return sales.filter((s: Sale) => s.customerId === customerId);
+  };
+
+  return (
+    <div className="space-y-6 h-full flex flex-col min-h-0 animate-in fade-in">
+      <div className="flex justify-between items-center shrink-0">
+        <div>
+          <h2 className="text-3xl font-black text-zinc-900 tracking-tighter uppercase italic">Gestão de Clientes</h2>
+          <p className="text-zinc-400 font-bold text-xs uppercase tracking-widest mt-1">Cadastre e acompanhe o histórico de seus clientes</p>
+        </div>
+        <button 
+          onClick={() => setShowBirthdays(!showBirthdays)}
+          className={`px-6 py-4 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] transition-all flex items-center gap-3 ${showBirthdays ? 'bg-amber-500 text-white' : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'}`}
+        >
+          <Cake size={18} /> Aniversariantes do Dia
+        </button>
+        <button 
+          onClick={() => { setForm({ name: '', document: '', email: '', phone: '', address: '', birthDate: '' }); setModal(true); }}
+          className="bg-red-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] shadow-xl shadow-red-100 hover:bg-red-700 active:scale-95 transition-all flex items-center gap-3"
+        >
+          <UserPlus size={18} /> Novo Cliente
+        </button>
+      </div>
+
+      <div className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-zinc-100 space-y-6 shrink-0">
+        <div className="relative group">
+          <Search size={20} className="absolute left-6 top-1/2 -translate-y-1/2 text-zinc-300 group-focus-within:text-red-500 transition-colors" />
+          <input 
+            type="text" 
+            placeholder="Buscar por nome, CPF/CNPJ ou telefone..." 
+            className="w-full pl-16 pr-6 py-5 bg-zinc-50 rounded-2xl border-2 border-zinc-100 focus:border-red-500 outline-none transition-all font-bold text-sm"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-hidden flex gap-6">
+        <div className="flex-1 bg-white rounded-[2.5rem] border border-zinc-100 overflow-hidden flex flex-col">
+          <div className="overflow-auto custom-scroll flex-1">
+            <table className="w-full text-left border-separate border-spacing-0">
+              <thead className="bg-zinc-50 sticky top-0 z-10">
+                <tr>
+                  <th className="px-8 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest border-b">Cliente</th>
+                  <th className="px-8 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest border-b">Documento</th>
+                  <th className="px-8 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest border-b">Contato</th>
+                  <th className="px-8 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest border-b text-right">Total Gasto</th>
+                  <th className="px-8 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest border-b text-center">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-50">
+                {filtered.map((c: Customer) => (
+                  <tr 
+                    key={c.id} 
+                    className={`hover:bg-zinc-50/80 transition-all cursor-pointer group ${selectedCustomer?.id === c.id ? 'bg-red-50/30' : ''}`}
+                    onClick={() => setSelectedCustomer(c)}
+                  >
+                    <td className="px-8 py-5">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-xl bg-zinc-100 flex items-center justify-center text-zinc-400 group-hover:bg-red-100 group-hover:text-red-600 transition-all">
+                          <UserIcon size={20} />
+                        </div>
+                        <div>
+                          <p className="font-black text-zinc-900 uppercase text-sm">{c.name}</p>
+                          <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-tighter">Desde {new Date(c.createdAt).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-8 py-5 font-mono text-xs font-bold text-zinc-500">{c.document || '---'}</td>
+                    <td className="px-8 py-5">
+                      <div className="space-y-0.5">
+                        <p className="text-xs font-bold text-zinc-700">{c.phone}</p>
+                        <p className="text-[10px] text-zinc-400">{c.email}</p>
+                      </div>
+                    </td>
+                    <td className="px-8 py-5 text-right font-black text-zinc-900 text-sm">R$ {formatCurrency(c.totalSpent)}</td>
+                    <td className="px-8 py-5">
+                      <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                        <button onClick={(e) => { e.stopPropagation(); setForm(c); setModal(true); }} className="p-2 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"><Edit size={16}/></button>
+                        <button onClick={(e) => { e.stopPropagation(); handleDelete(c.id); }} className="p-2 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={16}/></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {selectedCustomer && (
+          <div className="w-96 bg-white rounded-[2.5rem] border border-zinc-100 flex flex-col overflow-hidden animate-in slide-in-from-right-4">
+            <div className="p-8 border-b border-zinc-50 bg-zinc-50/50">
+              <div className="flex justify-between items-start mb-6">
+                <div className="w-16 h-16 rounded-[1.5rem] bg-red-600 flex items-center justify-center text-white shadow-lg shadow-red-200">
+                  <UserIcon size={32} />
+                </div>
+                <button onClick={() => setSelectedCustomer(null)} className="text-zinc-300 hover:text-zinc-500 transition-colors"><X size={24}/></button>
+              </div>
+              <h3 className="text-2xl font-black text-zinc-900 uppercase italic tracking-tight leading-tight mb-1">{selectedCustomer.name}</h3>
+              <p className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em]">{selectedCustomer.document}</p>
+            </div>
+
+            <div className="flex-1 overflow-auto p-8 custom-scroll space-y-8">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-zinc-50 p-4 rounded-2xl border border-zinc-100">
+                  <p className="text-[8px] font-black text-zinc-400 uppercase tracking-widest mb-1">Total Gasto</p>
+                  <p className="text-lg font-black text-zinc-900 font-mono">R$ {formatCurrency(selectedCustomer.totalSpent)}</p>
+                </div>
+                <div className="bg-zinc-50 p-4 rounded-2xl border border-zinc-100">
+                  <p className="text-[8px] font-black text-zinc-400 uppercase tracking-widest mb-1">Compras</p>
+                  <p className="text-lg font-black text-zinc-900 font-mono">{getCustomerSales(selectedCustomer.id).length}</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h4 className="text-[10px] font-black text-zinc-900 uppercase tracking-[0.3em] flex items-center gap-2">
+                  <History size={14} className="text-red-600" /> Histórico Recente
+                </h4>
+                <div className="space-y-3">
+                  {getCustomerSales(selectedCustomer.id).slice(0, 10).map((s: Sale) => (
+                    <div key={s.id} className="flex justify-between items-center p-4 bg-zinc-50 rounded-2xl border border-zinc-100 hover:border-red-200 transition-all group">
+                      <div>
+                        <p className="text-[10px] font-black text-zinc-900 uppercase">Venda #{s.id.toString().slice(-6)}</p>
+                        <p className="text-[9px] font-bold text-zinc-400 uppercase">{new Date(s.date).toLocaleDateString()}</p>
+                      </div>
+                      <p className="font-black text-zinc-900 text-sm group-hover:text-red-600 transition-colors">R$ {formatCurrency(s.total)}</p>
+                    </div>
+                  ))}
+                  {getCustomerSales(selectedCustomer.id).length === 0 && (
+                    <div className="text-center py-10">
+                      <p className="text-[10px] font-black text-zinc-300 uppercase tracking-widest italic">Nenhuma compra registrada</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {modal && (
+        <div className="fixed inset-0 flex items-center justify-center p-6 z-[200] animate-in fade-in">
+          <div className="absolute inset-0 bg-zinc-950/60 backdrop-blur-sm" onClick={() => setModal(false)}></div>
+          <div className="bg-white p-10 rounded-[3rem] w-full max-w-lg shadow-2xl relative z-10 space-y-8 border border-zinc-100">
+            <div className="flex justify-between items-center border-b pb-6">
+              <h3 className="text-2xl font-black text-zinc-900 uppercase italic flex items-center gap-3">
+                <UserPlus size={28} className="text-red-600" /> {form.id ? 'Editar Cliente' : 'Novo Cliente'}
+              </h3>
+              <button onClick={() => setModal(false)} className="text-zinc-300 hover:text-zinc-500 transition-colors"><X size={24}/></button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="grid grid-cols-2 gap-6">
+                <div className="col-span-2 space-y-1.5">
+                  <label className="text-[10px] font-black text-zinc-400 uppercase ml-1">Nome Completo</label>
+                  <input 
+                    type="text" 
+                    className="w-full rounded-2xl border-2 border-zinc-100 px-5 py-4 text-zinc-800 bg-zinc-50 focus:border-red-500 outline-none transition-all font-bold text-sm shadow-sm"
+                    value={form.name}
+                    onChange={e => setForm({ ...form, name: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-zinc-400 uppercase ml-1">CPF / CNPJ</label>
+                  <input 
+                    type="text" 
+                    className="w-full rounded-2xl border-2 border-zinc-100 px-5 py-4 text-zinc-800 bg-zinc-50 focus:border-red-500 outline-none transition-all font-bold text-sm shadow-sm"
+                    value={form.document || ''}
+                    onChange={e => setForm({ ...form, document: maskCPFCNPJ(e.target.value) })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-zinc-400 uppercase ml-1">Telefone</label>
+                  <input 
+                    type="text" 
+                    className="w-full rounded-2xl border-2 border-zinc-100 px-5 py-4 text-zinc-800 bg-zinc-50 focus:border-red-500 outline-none transition-all font-bold text-sm shadow-sm"
+                    value={form.phone || ''}
+                    onChange={e => setForm({ ...form, phone: maskPhone(e.target.value) })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-zinc-400 uppercase ml-1">Data de Nascimento</label>
+                  <input 
+                    type="text" 
+                    placeholder="DD/MM/AAAA"
+                    className="w-full rounded-2xl border-2 border-zinc-100 px-5 py-4 text-zinc-800 bg-zinc-50 focus:border-red-500 outline-none transition-all font-bold text-sm shadow-sm"
+                    value={form.birthDate || ''}
+                    onChange={e => setForm({ ...form, birthDate: maskDate(e.target.value) })}
+                  />
+                </div>
+                <div className="col-span-2 space-y-1.5">
+                  <label className="text-[10px] font-black text-zinc-400 uppercase ml-1">E-mail</label>
+                  <input 
+                    type="email" 
+                    className="w-full rounded-2xl border-2 border-zinc-100 px-5 py-4 text-zinc-800 bg-zinc-50 focus:border-red-500 outline-none transition-all font-bold text-sm shadow-sm"
+                    value={form.email || ''}
+                    onChange={e => setForm({ ...form, email: e.target.value })}
+                  />
+                </div>
+                <div className="col-span-2 space-y-1.5">
+                  <label className="text-[10px] font-black text-zinc-400 uppercase ml-1">Endereço Completo</label>
+                  <textarea 
+                    className="w-full rounded-2xl border-2 border-zinc-100 px-5 py-4 text-zinc-800 bg-zinc-50 focus:border-red-500 outline-none transition-all font-bold text-sm shadow-sm min-h-[100px]"
+                    value={form.address || ''}
+                    onChange={e => setForm({ ...form, address: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-6 border-t mt-4">
+                <button type="button" onClick={() => setModal(false)} className="px-5 py-2 text-zinc-400 font-black uppercase text-[10px] tracking-widest hover:text-zinc-600 transition-colors">Descartar</button>
+                <button type="submit" className="bg-red-600 text-white px-10 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl shadow-red-100 hover:bg-red-700 active:scale-95 transition-all">
+                  {form.id ? 'Salvar Alterações' : 'Cadastrar Cliente'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const SalesViewComponent = ({ user, products, setProducts, setSales, setMovements, vendedores, cashSession, setCashSession, settings, exchangeCredit, setExchangeCredit, campaigns, setCampaigns, fiados, setFiados, customers, setCustomers, setCurrentView }: any) => {
   const isMasterUser = user.id === 0 || user.email === 'master@internal';
   const isAdmin = user.role === 'admin' || isMasterUser;
   
@@ -1642,6 +1969,20 @@ const SalesViewComponent = ({ user, products, setProducts, setSales, setMovement
   
   const [discountType, setDiscountType] = useState<'value' | 'percent'>('percent');
   const [discountInput, setDiscountInput] = useState<number>(0);
+
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [showCustomerSearch, setShowCustomerSearch] = useState(false);
+
+  const filteredCustomers = useMemo(() => {
+    if (!customerSearch) return [];
+    const t = customerSearch.toLowerCase();
+    return (customers || []).filter((c: Customer) => 
+      c.name.toLowerCase().includes(t) || 
+      c.document.includes(t) || 
+      c.phone.includes(t)
+    );
+  }, [customers, customerSearch]);
 
   const filtered = useMemo(() => {
     const active = products.filter((p: Product) => p.active && p.stock > 0);
@@ -1917,9 +2258,19 @@ const SalesViewComponent = ({ user, products, setProducts, setSales, setMovement
       adminUser: user.name, 
       items: [...cart], 
       change: changeValue,
-      exchangeCreditUsed: creditToUse
+      exchangeCreditUsed: creditToUse,
+      customerId: selectedCustomer?.id,
+      customerName: selectedCustomer?.name
     };
     setSales((prev: any) => [sale, ...prev]);
+
+    if (selectedCustomer) {
+      setCustomers((prev: Customer[]) => prev.map(c => 
+        c.id === selectedCustomer.id 
+          ? { ...c, totalSpent: c.totalSpent + totalFinalToPay, lastPurchase: new Date().toISOString() } 
+          : c
+      ));
+    }
 
     const f12Payments = appliedPayments.filter(p => p.method === 'F12');
     if (f12Payments.length > 0) {
@@ -1975,6 +2326,8 @@ const SalesViewComponent = ({ user, products, setProducts, setSales, setMovement
     setAppliedPayments([]); 
     setDiscountInput(0); 
     setExchangeCredit(remainingExchangeCredit);
+    setSelectedCustomer(null);
+    setCustomerSearch('');
   };
 
   const addPayment = () => {
@@ -2316,6 +2669,72 @@ const SalesViewComponent = ({ user, products, setProducts, setSales, setMovement
                  </div>
               </div>
               <div className="space-y-3">
+                <div className="space-y-1 relative">
+                  <label className="text-[8px] font-black text-zinc-400 uppercase ml-1">Cliente</label>
+                  {!selectedCustomer ? (
+                    <div className="relative">
+                      <input 
+                        type="text"
+                        placeholder="Buscar por Nome, CPF ou CNPJ..."
+                        className="w-full border rounded-lg px-2.5 py-2 bg-zinc-50 text-zinc-800 font-bold text-[10px] uppercase outline-none focus:border-red-500 transition-all"
+                        value={customerSearch}
+                        onChange={e => {
+                          setCustomerSearch(e.target.value);
+                          setShowCustomerSearch(true);
+                        }}
+                        onFocus={() => setShowCustomerSearch(true)}
+                      />
+                      {showCustomerSearch && customerSearch && (
+                        <div className="absolute bottom-full left-0 w-full bg-white border rounded-xl shadow-2xl mb-2 z-50 overflow-hidden animate-in slide-in-from-bottom-2">
+                          {filteredCustomers.length > 0 ? (
+                            <div className="max-h-48 overflow-auto custom-scroll">
+                              {filteredCustomers.map((c: Customer) => (
+                                <button
+                                  key={c.id}
+                                  type="button"
+                                  className="w-full px-4 py-3 text-left hover:bg-zinc-50 flex flex-col border-b last:border-0"
+                                  onClick={() => {
+                                    setSelectedCustomer(c);
+                                    setShowCustomerSearch(false);
+                                    setCustomerSearch('');
+                                  }}
+                                >
+                                  <span className="text-[10px] font-black text-zinc-900 uppercase">{c.name}</span>
+                                  <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-tighter">{c.document || 'Sem Documento'}</span>
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="p-4 text-center">
+                              <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Nenhum cliente encontrado</p>
+                              <button 
+                                type="button"
+                                onClick={() => setCurrentView('customers')}
+                                className="text-[9px] font-black text-red-600 uppercase tracking-widest mt-2 hover:underline"
+                              >
+                                Cadastrar Novo
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between bg-red-50 border border-red-100 p-2 rounded-lg">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] font-black text-red-700 uppercase">{selectedCustomer.name}</span>
+                        <span className="text-[8px] font-bold text-red-400 uppercase tracking-tighter">{selectedCustomer.document}</span>
+                      </div>
+                      <button 
+                        type="button" 
+                        onClick={() => setSelectedCustomer(null)}
+                        className="p-1 text-red-300 hover:text-red-600 transition-colors"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <div className="space-y-1">
                   <label className="text-[8px] font-black text-zinc-400 uppercase ml-1">VENDEDOR RESPONSÁVEL</label>
                   <select className="w-full border rounded-lg px-2.5 py-2 bg-zinc-50 text-zinc-800 font-black text-[10px] uppercase cursor-pointer focus:border-red-500 outline-none transition-all" value={assignedVendedor} onChange={e => setAssignedVendedor(e.target.value)}>
