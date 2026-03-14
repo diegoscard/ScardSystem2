@@ -1,5 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 import { createRoot } from 'react-dom/client';
 import { 
   LayoutDashboard, Package, ShoppingCart, ArrowRightLeft, 
@@ -3034,7 +3036,7 @@ const SalesViewComponent = ({ user, products, setProducts, setSales, setMovement
 
 // --- ESTOQUE ---
 
-const StockManagementView = ({ products, setProducts, categories, setCategories }: any) => {
+const StockManagementView = ({ user, products, setProducts, categories, setCategories }: any) => {
   const [modal, setModal] = useState(false);
   const [summaryModal, setSummaryModal] = useState(false);
   const [summaryText, setSummaryText] = useState('');
@@ -3044,6 +3046,97 @@ const StockManagementView = ({ products, setProducts, categories, setCategories 
   const [filterCategory, setFilterCategory] = useState('Todas');
   const [filterSize, setFilterSize] = useState('');
   const [filterColor, setFilterColor] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const isMaster = user?.id === 0 || user?.email === 'master@internal';
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const processData = (data: any[]) => {
+      console.log('Primeira linha do arquivo importado:', data[0]);
+      console.log('Chaves encontradas na planilha:', Object.keys(data[0] || {}));
+      
+      const parseCurrency = (value: any) => {
+        if (typeof value === 'number') return value;
+        if (typeof value === 'string') {
+          // Remove currency symbols, spaces, and handle comma as decimal separator
+          const cleaned = value.replace(/[R$\s]/g, '').replace(',', '.');
+          return parseFloat(cleaned) || 0;
+        }
+        return 0;
+      };
+
+      setProducts((prevProducts: any[]) => {
+        const existingSkus = new Set(prevProducts.map(p => p.sku));
+        const newProducts: any[] = [];
+        const newCategories = new Set(categories);
+
+        data.forEach((row: any) => {
+          let sku = row['SKU'] ? String(row['SKU']) : '';
+          
+          if (!sku) {
+            while (!sku || existingSkus.has(sku) || newProducts.some(p => p.sku === sku)) {
+              sku = Math.floor(10000 + Math.random() * 90000).toString();
+            }
+          }
+          existingSkus.add(sku);
+
+          const category = row['Categoria'] || 'Sem Categoria';
+          if (category !== 'Sem Categoria' && !newCategories.has(category)) {
+            newCategories.add(category);
+          }
+
+          const cost = parseCurrency(row['Custo']);
+          const price = parseCurrency(row['Venda']);
+          const markup = cost > 0 ? price / cost : 2.0;
+
+          newProducts.push({
+            id: Date.now() + Math.random(),
+            name: row['Descrição Comercial'] || 'Sem Nome',
+            sku: sku,
+            category: category,
+            cost: cost,
+            price: price,
+            markup: markup,
+            stock: Number(row['Qtd em Estoque']) || 0,
+            size: row['Qualidade'] || '',
+            color: row['Cor'] || '',
+            discountBlocked: row.discountBlocked === 'true' || row.discountBlocked === true,
+            active: true,
+          });
+        });
+        
+        setCategories(Array.from(newCategories));
+        return [...prevProducts, ...newProducts];
+      });
+      
+      alert('Importação concluída!');
+    };
+
+    if (file.name.endsWith('.csv')) {
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => processData(results.data),
+        error: (error) => alert('Erro ao importar CSV: ' + error.message),
+      });
+    } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json(worksheet);
+        processData(json);
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      alert('Formato de arquivo não suportado. Use .csv ou .xlsx');
+    }
+  };
 
   const sortedCategories = useMemo(() => { 
     return [...categories].sort((a, b) => { if (a === 'Sem Categoria') return -1; if (b === 'Sem Categoria') return 1; return a.localeCompare(b); }); 
@@ -3132,6 +3225,14 @@ const StockManagementView = ({ products, setProducts, categories, setCategories 
             <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Controle de mercadorias</p>
             </div>
             <div className="flex gap-2">
+                {isMaster && (
+                  <>
+                    <input type="file" ref={fileInputRef} onChange={handleImport} className="hidden" accept=".csv,.xlsx,.xls" />
+                    <button type="button" onClick={() => fileInputRef.current?.click()} className="bg-zinc-100 text-zinc-600 px-6 py-3 rounded-xl font-black flex items-center gap-2 shadow-sm active:scale-95 text-[10px] uppercase hover:bg-zinc-200">
+                      <Upload size={16}/> Importar
+                    </button>
+                  </>
+                )}
                 <button 
                   onClick={() => setIsExact(!isExact)} 
                   className={`flex items-center gap-2 px-4 py-2 rounded-xl border-2 transition-all font-black text-[10px] uppercase tracking-widest ${isExact ? 'bg-red-600 border-red-600 text-white shadow-lg' : 'bg-white border-zinc-200 text-zinc-400 hover:border-red-300'}`}
