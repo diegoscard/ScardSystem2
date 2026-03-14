@@ -102,10 +102,8 @@ interface Product {
   markup: number; 
   stock: number;
   size: string;
-  color: string;
   active: boolean;
   supplierId?: number;
-  discountBlocked?: boolean; // Bloqueio de desconto no produto
 }
 
 interface StockMovement {
@@ -127,7 +125,6 @@ interface SaleItem {
   quantity: number;
   price: number;
   size?: string;
-  color?: string;
   discountValue: number; 
   manualDiscountValue: number; 
   manualDiscountInput?: number; // Valor bruto digitado no input do item
@@ -135,7 +132,6 @@ interface SaleItem {
   isExchanged?: boolean; 
   campaignName?: string; 
   campaignType?: 'percentage' | 'buy_x_get_y' | 'voucher' | 'bundle' | 'fixed_price';
-  discountBlocked?: boolean; // Herdado do produto
 }
 
 interface PaymentRecord {
@@ -1140,7 +1136,6 @@ const ProductSearchViewComponent = ({ products, categories }: { products: Produc
   const [isExact, setIsExact] = useState(false);
   const [filterCategory, setFilterCategory] = useState('Todas');
   const [filterSize, setFilterSize] = useState('');
-  const [filterColor, setFilterColor] = useState('');
   const [summaryModal, setSummaryModal] = useState(false);
   const [summaryText, setSummaryText] = useState('');
 
@@ -1155,7 +1150,6 @@ const ProductSearchViewComponent = ({ products, categories }: { products: Produc
   const filteredProducts = useMemo(() => {
     const t = search.toLowerCase();
     const s = filterSize.toLowerCase();
-    const c = filterColor.toLowerCase();
     return products.filter((p: Product) => {
       let matchSearch = false;
       if (!t) {
@@ -1170,10 +1164,9 @@ const ProductSearchViewComponent = ({ products, categories }: { products: Produc
 
       const matchCategory = filterCategory === 'Todas' ? true : p.category === filterCategory;
       const matchSize = s ? p.size?.toLowerCase().includes(s) : true;
-      const matchColor = c ? p.color?.toLowerCase().includes(c) : true;
-      return matchSearch && matchCategory && matchSize && matchColor;
+      return matchSearch && matchCategory && matchSize;
     });
-  }, [products, search, isExact, filterCategory, filterSize, filterColor]);
+  }, [products, search, isExact, filterCategory, filterSize]);
 
   const generateWppSummary = () => {
     if (filteredProducts.length === 0) {
@@ -1248,8 +1241,8 @@ const ProductSearchViewComponent = ({ products, categories }: { products: Produc
                 onChange={e => setFilterSize(e.target.value)}
               />
             </div>
-            {(filterSize || filterColor) && (
-              <button onClick={() => { setFilterSize(''); setFilterColor(''); }} className="text-[9px] font-black text-red-400 uppercase hover:text-red-600 transition-colors flex items-center gap-1">
+            {filterSize && (
+              <button onClick={() => { setFilterSize(''); }} className="text-[9px] font-black text-red-400 uppercase hover:text-red-600 transition-colors flex items-center gap-1">
                 <X size={12} /> Limpar Filtros
               </button>
             )}
@@ -1283,8 +1276,7 @@ const ProductSearchViewComponent = ({ products, categories }: { products: Produc
                     <td className="px-6 py-4">
                        <div className="flex flex-col text-[11px] font-bold text-zinc-600">
                           {p.size && <span>QLD: {p.size}</span>}
-                          {p.color && <span>COR: {p.color}</span>}
-                          {!p.size && !p.color && <span className="text-zinc-300">-</span>}
+                          {!p.size && <span className="text-zinc-300">-</span>}
                        </div>
                     </td>
                     <td className="px-6 py-4 font-black text-zinc-900 font-mono text-sm text-right">R$ {formatCurrency(p.price)}</td>
@@ -2141,12 +2133,10 @@ const SalesViewComponent = ({ user, products, setProducts, setSales, setMovement
       quantity: 1,
       price: p.price,
       size: p.size,
-      color: p.color,
       discountValue: 0,
       manualDiscountValue: 0,
       manualDiscountInput: 0,
-      manualDiscountType: 'value',
-      discountBlocked: p.discountBlocked || false
+      manualDiscountType: 'value'
     };
 
     const updatedCart = applyAutomaticCampaigns([...cart, newItem]);
@@ -2196,7 +2186,7 @@ const SalesViewComponent = ({ user, products, setProducts, setSales, setMovement
   }, [cart]);
 
   const totalGrossDiscretionaryBase = useMemo(() => {
-    return cart.filter(it => !it.discountBlocked).reduce((acc, i) => acc + (i.price * i.quantity), 0);
+    return cart.reduce((acc, i) => acc + (i.price * i.quantity), 0);
   }, [cart]);
 
   const totalManualItemDiscounts = useMemo(() => {
@@ -2492,9 +2482,9 @@ const SalesViewComponent = ({ user, products, setProducts, setSales, setMovement
                           <span className="font-bold text-zinc-800 text-[11px] leading-tight">{item.name}</span>
                           <div className="flex items-center gap-2 mt-0.5">
                             <span className="text-[8px] font-black text-red-600 uppercase font-mono">{item.sku}</span>
-                            {(item.size || item.color) && (
+                            {item.size && (
                               <span className="text-[8px] text-zinc-400 font-bold uppercase tracking-tighter">
-                                • {item.size ? `QLD: ${item.size}` : ''} {item.color ? ` / COR: ${item.color}` : ''}
+                                • {item.size ? `QLD: ${item.size}` : ''}
                               </span>
                             )}
                           </div>
@@ -2510,11 +2500,6 @@ const SalesViewComponent = ({ user, products, setProducts, setSales, setMovement
                                  item.campaignType === 'bundle' ? 'Combo' : 
                                  item.campaignType === 'fixed_price' ? 'Preço Fixo' :
                                  'Cupom'}: {item.campaignName}
-                            </span>
-                          )}
-                          {item.discountBlocked && (
-                            <span className="text-[7px] font-black px-1.5 py-0.5 rounded-md w-fit mt-1 uppercase bg-zinc-900 text-white shadow-sm flex items-center gap-1">
-                               <ShieldAlert size={8} /> Desconto Bloqueado
                             </span>
                           )}
                         </div>
@@ -2534,7 +2519,7 @@ const SalesViewComponent = ({ user, products, setProducts, setSales, setMovement
                       </td>
                       <td className="px-4 py-2 text-center">
                         <div className="flex flex-col items-center gap-1">
-                          <div className={`relative w-40 mx-auto flex items-center bg-zinc-50 border rounded-lg transition-all ${item.discountBlocked ? 'opacity-30 pointer-events-none' : 'focus-within:border-red-400'}`}>
+                          <div className={`relative w-40 mx-auto flex items-center bg-zinc-50 border rounded-lg transition-all focus-within:border-red-400`}>
                             <div className="flex bg-zinc-100 rounded-l-lg border-r overflow-hidden h-full shrink-0">
                                <button 
                                  type="button" 
@@ -2557,7 +2542,6 @@ const SalesViewComponent = ({ user, products, setProducts, setSales, setMovement
                             </div>
                             <input 
                               type="text"
-                              disabled={item.discountBlocked}
                               className="w-full px-2 py-1 text-[10px] font-black font-mono text-center outline-none bg-transparent"
                               placeholder="0"
                               value={item.manualDiscountType === 'value' ? formatCurrency(item.manualDiscountInput || 0) : (item.manualDiscountInput || 0)}
@@ -2570,7 +2554,7 @@ const SalesViewComponent = ({ user, products, setProducts, setSales, setMovement
                                   val = Number(raw.replace(/\D/g, '')) || 0;
                                 }
 
-                                const totalGross = cart.filter(it => !it.discountBlocked).reduce((acc, i) => acc + (i.price * i.quantity), 0);
+                                const totalGross = cart.reduce((acc, i) => acc + (i.price * i.quantity), 0);
                                 const limitPct = isAdmin ? 100 : settings.maxGlobalDiscount;
                                 const maxTotalBudget = isAdmin ? totalGross : (totalGross * (limitPct / 100));
 
@@ -2890,7 +2874,7 @@ const SalesViewComponent = ({ user, products, setProducts, setSales, setMovement
                         <div key={idx} className="flex justify-between items-start leading-tight">
                             <span className="flex-1 pr-4 uppercase">
                                 {it.quantity}x {it.name}
-                                {it.size && <span className="text-[8px] block text-zinc-400">QLD: {it.size} | COR: {it.color}</span>}
+                                {it.size && <span className="text-[8px] block text-zinc-400">QLD: {it.size}</span>}
                             </span>
                             <span className="font-black">R$ {formatCurrency((it.price * it.quantity) - it.discountValue - it.manualDiscountValue)}</span>
                         </div>
@@ -3040,12 +3024,11 @@ const StockManagementView = ({ user, products, setProducts, categories, setCateg
   const [modal, setModal] = useState(false);
   const [summaryModal, setSummaryModal] = useState(false);
   const [summaryText, setSummaryText] = useState('');
-  const [form, setForm] = useState<any>({ cost: 0, price: 0, markup: 2.0, category: 'Sem Categoria', stock: 0, size: '', color: '', discountBlocked: false });
+  const [form, setForm] = useState<any>({ cost: 0, price: 0, markup: 2.0, category: 'Sem Categoria', stock: 0, size: '' });
   const [search, setSearch] = useState('');
   const [isExact, setIsExact] = useState(false);
   const [filterCategory, setFilterCategory] = useState('Todas');
   const [filterSize, setFilterSize] = useState('');
-  const [filterColor, setFilterColor] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const isMaster = user?.id === 0 || user?.email === 'master@internal';
@@ -3102,8 +3085,6 @@ const StockManagementView = ({ user, products, setProducts, categories, setCateg
             markup: markup,
             stock: Number(row['Qtd em Estoque']) || 0,
             size: row['Qualidade'] || '',
-            color: row['Cor'] || '',
-            discountBlocked: row.discountBlocked === 'true' || row.discountBlocked === true,
             active: true,
           });
         });
@@ -3166,15 +3147,14 @@ const StockManagementView = ({ user, products, setProducts, categories, setCateg
     if (products.some((p: Product) => p.sku === form.sku && p.id !== form.id)) return alert('SKU duplicado!');
     // Correct variable assignment typo
     const id = form.id || Date.now();
-    const p = { ...form, id, active: true, price: Number(form.price) || 0, cost: Number(form.cost) || 0, markup: Number(form.markup) || 1, stock: Number(form.stock) || 0, discountBlocked: !!form.discountBlocked };
+    const p = { ...form, id, active: true, price: Number(form.price) || 0, cost: Number(form.cost) || 0, markup: Number(form.markup) || 1, stock: Number(form.stock) || 0 };
     if (form.id) setProducts((prev: any) => prev.map((x: any) => x.id === id ? p : x));
     else setProducts((prev: any) => [...prev, p]);
-    setModal(false); setForm({ cost: 0, price: 0, markup: 2.0, category: 'Sem Categoria', stock: 0, size: '', color: '', discountBlocked: false });
+    setModal(false); setForm({ cost: 0, price: 0, markup: 2.0, category: 'Sem Categoria', stock: 0, size: '' });
   };
   const filteredProducts = useMemo(() => {
     const t = search.toLowerCase();
     const s = filterSize.toLowerCase();
-    const c = filterColor.toLowerCase();
     return products.filter((p: Product) => {
       let matchSearch = false;
       if (!t) {
@@ -3189,10 +3169,9 @@ const StockManagementView = ({ user, products, setProducts, categories, setCateg
 
       const matchCategory = filterCategory === 'Todas' ? true : p.category === filterCategory;
       const matchSize = s ? p.size?.toLowerCase().includes(s) : true;
-      const matchColor = c ? p.color?.toLowerCase().includes(c) : true;
-      return matchSearch && matchCategory && matchSize && matchColor;
+      return matchSearch && matchCategory && matchSize;
     });
-  }, [products, search, isExact, filterCategory, filterSize, filterColor]);
+  }, [products, search, isExact, filterCategory, filterSize]);
 
   const generateWppSummary = () => {
     if (filteredProducts.length === 0) {
@@ -3243,7 +3222,7 @@ const StockManagementView = ({ user, products, setProducts, categories, setCateg
                 <button type="button" onClick={generateWppSummary} className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-black flex items-center gap-2 shadow-lg active:scale-95 text-[10px] uppercase">
                   <Share2 size={16}/> Resumo WhatsApp
                 </button>
-                <button type="button" onClick={() => { setForm({stock: 0, cost: 0, price: 0, markup: 2.0, size: '', color: '', sku: '', category: 'Sem Categoria', discountBlocked: false}); setModal(true); }} className="bg-red-600 text-white px-6 py-3 rounded-xl font-black flex items-center gap-2 shadow-lg active:scale-95 text-[10px] uppercase">
+                <button type="button" onClick={() => { setForm({stock: 0, cost: 0, price: 0, markup: 2.0, size: '', sku: '', category: 'Sem Categoria'}); setModal(true); }} className="bg-red-600 text-white px-6 py-3 rounded-xl font-black flex items-center gap-2 shadow-lg active:scale-95 text-[10px] uppercase">
                   <Plus size={16}/> Novo Cadastro
                 </button>
             </div>
@@ -3278,8 +3257,8 @@ const StockManagementView = ({ user, products, setProducts, categories, setCateg
               onChange={e => setFilterSize(e.target.value)}
             />
           </div>
-          {(filterSize || filterColor) && (
-            <button onClick={() => { setFilterSize(''); setFilterColor(''); }} className="text-[9px] font-black text-red-400 uppercase hover:text-red-600 transition-colors flex items-center gap-1">
+          {filterSize && (
+            <button onClick={() => { setFilterSize(''); }} className="text-[9px] font-black text-red-400 uppercase hover:text-red-600 transition-colors flex items-center gap-1">
               <X size={12} /> Limpar Filtros
             </button>
           )}
@@ -3307,7 +3286,6 @@ const StockManagementView = ({ user, products, setProducts, categories, setCateg
                     <div className="flex flex-col">
                       <span className={`font-bold text-xs ${p.stock === 0 ? 'text-red-700' : 'text-zinc-800'}`}>{p.name}</span>
                       <span className={`text-[8px] font-black font-mono ${p.stock === 0 ? 'text-red-400' : 'text-red-400'}`}>{p.sku}</span>
-                      {p.discountBlocked && <span className="text-[7px] text-red-500 font-black uppercase mt-0.5">Sem Desconto</span>}
                     </div>
                   </td>
                   <td className="px-6 py-4">
@@ -3316,8 +3294,7 @@ const StockManagementView = ({ user, products, setProducts, categories, setCateg
                   <td className="px-6 py-4">
                      <div className="flex flex-col leading-tight">
                         {p.size && <span className={`text-[12px] font-black uppercase ${p.stock === 0 ? 'text-red-700' : 'text-zinc-900'}`}>QLD: {p.size}</span>}
-                        {p.color && <span className={`text-[12px] font-bold mt-0.5 ${p.stock === 0 ? 'text-red-600' : 'text-zinc-600'}`}>{p.color}</span>}
-                        {!p.size && !p.color && <span className="text-[10px] text-zinc-300">-</span>}
+                        {!p.size && <span className="text-[10px] text-zinc-300">-</span>}
                      </div>
                   </td>
                   <td className={`px-6 py-4 font-black font-mono text-xs text-right ${p.stock === 0 ? 'text-red-700' : 'text-zinc-500'}`}>R$ {formatCurrency(p.cost)}</td>
@@ -3478,7 +3455,7 @@ const DashboardViewComponent = ({ products, sales, cashSession, fiados, cashHist
 
   const stats = useMemo(() => {
     let totals = { total: 0, cash: 0, pix: 0, card: 0, f12: 0, count: 0 };
-    let productsCount: Record<number, { name: string, qty: number, size?: string, color?: string }> = {};
+    let productsCount: Record<number, { name: string, qty: number, size?: string }> = {};
 
     filteredSales.forEach((s: Sale) => {
       totals.count += 1;
@@ -3494,7 +3471,7 @@ const DashboardViewComponent = ({ products, sales, cashSession, fiados, cashHist
         }
       });
       s.items.forEach(item => {
-        if (!productsCount[item.productId]) { productsCount[item.productId] = { name: item.name, qty: 0, size: item.size, color: item.color }; }
+        if (!productsCount[item.productId]) { productsCount[item.productId] = { name: item.name, qty: 0, size: item.size }; }
         productsCount[item.productId].qty += item.quantity;
       });
     });
@@ -3622,7 +3599,7 @@ const DashboardViewComponent = ({ products, sales, cashSession, fiados, cashHist
                           <div>
                              <div className="flex items-center gap-2"><span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">{idx + 1}º mais vendido</span></div>
                              <h4 className="text-lg font-black text-zinc-900 uppercase italic leading-tight">{p.name}</h4>
-                             {(p.size || p.color) && (<p className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] mt-1 italic opacity-80 flex items-center gap-2">{p.size && <span>qld: <span className="text-red-500">{p.size}</span></span>}{p.color && <span>/ cor: <span className="text-red-500">{p.color}</span></span>}</p>)}
+                             {p.size && (<p className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] mt-1 italic opacity-80 flex items-center gap-2">{p.size && <span>qld: <span className="text-red-500">{p.size}</span></span>}</p>)}
                           </div>
                        </div>
                        <div className="text-right"><p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest mb-1 opacity-60">Qtd Saída</p><p className="text-xl font-black text-red-600">{p.qty} <span className="text-[10px] text-zinc-400 uppercase">un</span></p></div>
@@ -4240,7 +4217,7 @@ const ReportsViewComponent = ({ user, sales, setSales, products, setProducts, se
         </div>
       )}
       
-      {selectedSale && (<div className="fixed inset-0 flex items-center justify-center p-6 z-[100] animate-in fade-in"><div className="bg-white p-8 rounded-[2rem] w-full max-w-2xl shadow-2xl space-y-6 max-h-[90vh] overflow-auto custom-scroll"><div className="flex justify-between items-center border-b pb-4"><h3 className="text-xl font-black text-zinc-900 uppercase italic">Detalhes da Venda #{selectedSale.id.toString().slice(-6)}</h3><div className="flex items-center gap-2"><button onClick={() => setReprintSale(selectedSale)} className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition-all" title="Reimprimir Cupom"><Printer size={20}/></button><button onClick={() => setSelectedSale(null)} className="text-zinc-300 hover:text-zinc-500"><X size={24}/></button></div></div><div className="grid grid-cols-2 gap-6 bg-zinc-50 p-4 rounded-2xl border"><div><p className="text-[8px] font-black text-zinc-400 uppercase tracking-widest mb-1">Data / Hora</p><p className="text-xs font-bold text-zinc-700">{new Date(selectedSale.date).toLocaleString()}</p></div><div><p className="text-[8px] font-black text-zinc-400 uppercase tracking-widest mb-1">Vendedor</p><p className="text-xs font-black text-red-600 uppercase">{selectedSale.user}</p></div></div><div className="space-y-3"><h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Produtos Vendidos</h4><div className="border rounded-2xl overflow-hidden"><table className="w-full text-left text-xs"><thead className="bg-zinc-50 font-black text-zinc-500 uppercase text-[9px]"><tr><th className="px-4 py-2">Item</th><th className="px-4 py-2 text-center">Qtd</th><th className="px-4 py-2 text-right">Total</th><th className="px-4 py-2 text-center">Troca</th></tr></thead><tbody className="divide-y">{selectedSale.items.map((it, i) => (<tr key={i} className={`bg-white ${it.isExchanged ? 'opacity-50 grayscale' : ''}`}><td className="px-4 py-3"><div className="flex flex-col"><span className="font-bold">{it.name}</span><span className="text-[9px] text-zinc-400 font-mono">{it.sku}</span><span className="text-[8px] text-zinc-500 italic mt-0.5 uppercase tracking-tighter">qld: {it.size || '-'} / cor: {it.color || '-'}</span>{it.isExchanged && <span className="text-[7px] font-black text-red-500 uppercase mt-0.5 animate-pulse">Item Trocado</span>}</div></td><td className="px-4 py-3 text-center font-bold">{it.quantity}</td><td className="px-4 py-3 text-right font-mono font-bold text-red-600">R$ {formatCurrency((it.price * it.quantity) - it.discountValue - it.manualDiscountValue)}</td><td className="px-4 py-3 text-center">{canExchange && !it.isExchanged && (<button onClick={() => handleItemExchange(selectedSale, it)} className="p-1.5 bg-amber-50 text-amber-500 hover:bg-amber-500 hover:text-white rounded-lg transition-all shadow-sm" title="Trocar Item"><RotateCcw size={14}/></button>)}</td></tr>))}</tbody></table></div></div><div className="border-t pt-6 flex flex-col items-end gap-2"><div className="flex justify-between w-64 text-xs font-bold text-zinc-400"><span>Subtotal</span><span className="font-mono">R$ {formatCurrency(selectedSale.subtotal)}</span></div><div className="flex justify-between w-64 text-xs font-bold text-red-400"><span>Desconto ({selectedSale.discountPercent.toFixed(1)}%)</span><span className="font-mono">- R$ {formatCurrency(selectedSale.discount)}</span></div>{selectedSale.exchangeCreditUsed && selectedSale.exchangeCreditUsed > 0 && (<div className="flex justify-between w-64 text-xs font-bold text-amber-500"><span>Crédito Utilizado</span><span className="font-mono">- R$ {formatCurrency(selectedSale.exchangeCreditUsed)}</span></div>)}<div className="flex justify-between w-64 text-xl font-black text-zinc-900 border-t pt-2"><span className="italic uppercase tracking-tighter">Total Pago</span><span className="font-mono">R$ {formatCurrency(selectedSale.total)}</span></div></div><div className="space-y-3"><h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Meios de Pagamento</h4><div className="flex flex-wrap gap-2">{selectedSale.payments.map((p, i) => (<div key={i} className={`bg-${p.method === 'F12' ? 'purple' : 'red'}-50 border border-${p.method === 'F12' ? 'purple' : 'red'}-100 px-3 py-2 rounded-xl flex flex-col`}><span className={`text-[8px] font-black text-${p.method === 'F12' ? 'purple' : 'red'}-400 uppercase`}>{p.method} {p.installments ? `${p.installments}x` : ''} {p.method === 'F12' ? ` (${p.f12ClientName})` : ''}</span><span className={`text-xs font-black text-${p.method === 'F12' ? 'purple' : 'red'}-600 font-mono`}>R$ {formatCurrency(p.amount)}</span></div>))}</div></div></div></div>)}
+      {selectedSale && (<div className="fixed inset-0 flex items-center justify-center p-6 z-[100] animate-in fade-in"><div className="bg-white p-8 rounded-[2rem] w-full max-w-2xl shadow-2xl space-y-6 max-h-[90vh] overflow-auto custom-scroll"><div className="flex justify-between items-center border-b pb-4"><h3 className="text-xl font-black text-zinc-900 uppercase italic">Detalhes da Venda #{selectedSale.id.toString().slice(-6)}</h3><div className="flex items-center gap-2"><button onClick={() => setReprintSale(selectedSale)} className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition-all" title="Reimprimir Cupom"><Printer size={20}/></button><button onClick={() => setSelectedSale(null)} className="text-zinc-300 hover:text-zinc-500"><X size={24}/></button></div></div><div className="grid grid-cols-2 gap-6 bg-zinc-50 p-4 rounded-2xl border"><div><p className="text-[8px] font-black text-zinc-400 uppercase tracking-widest mb-1">Data / Hora</p><p className="text-xs font-bold text-zinc-700">{new Date(selectedSale.date).toLocaleString()}</p></div><div><p className="text-[8px] font-black text-zinc-400 uppercase tracking-widest mb-1">Vendedor</p><p className="text-xs font-black text-red-600 uppercase">{selectedSale.user}</p></div></div><div className="space-y-3"><h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Produtos Vendidos</h4><div className="border rounded-2xl overflow-hidden"><table className="w-full text-left text-xs"><thead className="bg-zinc-50 font-black text-zinc-500 uppercase text-[9px]"><tr><th className="px-4 py-2">Item</th><th className="px-4 py-2 text-center">Qtd</th><th className="px-4 py-2 text-right">Total</th><th className="px-4 py-2 text-center">Troca</th></tr></thead><tbody className="divide-y">{selectedSale.items.map((it, i) => (<tr key={i} className={`bg-white ${it.isExchanged ? 'opacity-50 grayscale' : ''}`}><td className="px-4 py-3"><div className="flex flex-col"><span className="font-bold">{it.name}</span><span className="text-[9px] text-zinc-400 font-mono">{it.sku}</span><span className="text-[8px] text-zinc-500 italic mt-0.5 uppercase tracking-tighter">qld: {it.size || '-'}</span>{it.isExchanged && <span className="text-[7px] font-black text-red-500 uppercase mt-0.5 animate-pulse">Item Trocado</span>}</div></td><td className="px-4 py-3 text-center font-bold">{it.quantity}</td><td className="px-4 py-3 text-right font-mono font-bold text-red-600">R$ {formatCurrency((it.price * it.quantity) - it.discountValue - it.manualDiscountValue)}</td><td className="px-4 py-3 text-center">{canExchange && !it.isExchanged && (<button onClick={() => handleItemExchange(selectedSale, it)} className="p-1.5 bg-amber-50 text-amber-500 hover:bg-amber-500 hover:text-white rounded-lg transition-all shadow-sm" title="Trocar Item"><RotateCcw size={14}/></button>)}</td></tr>))}</tbody></table></div></div><div className="border-t pt-6 flex flex-col items-end gap-2"><div className="flex justify-between w-64 text-xs font-bold text-zinc-400"><span>Subtotal</span><span className="font-mono">R$ {formatCurrency(selectedSale.subtotal)}</span></div><div className="flex justify-between w-64 text-xs font-bold text-red-400"><span>Desconto ({selectedSale.discountPercent.toFixed(1)}%)</span><span className="font-mono">- R$ {formatCurrency(selectedSale.discount)}</span></div>{selectedSale.exchangeCreditUsed && selectedSale.exchangeCreditUsed > 0 && (<div className="flex justify-between w-64 text-xs font-bold text-amber-500"><span>Crédito Utilizado</span><span className="font-mono">- R$ {formatCurrency(selectedSale.exchangeCreditUsed)}</span></div>)}<div className="flex justify-between w-64 text-xl font-black text-zinc-900 border-t pt-2"><span className="italic uppercase tracking-tighter">Total Pago</span><span className="font-mono">R$ {formatCurrency(selectedSale.total)}</span></div></div><div className="space-y-3"><h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Meios de Pagamento</h4><div className="flex flex-wrap gap-2">{selectedSale.payments.map((p, i) => (<div key={i} className={`bg-${p.method === 'F12' ? 'purple' : 'red'}-50 border border-${p.method === 'F12' ? 'purple' : 'red'}-100 px-3 py-2 rounded-xl flex flex-col`}><span className={`text-[8px] font-black text-${p.method === 'F12' ? 'purple' : 'red'}-400 uppercase`}>{p.method} {p.installments ? `${p.installments}x` : ''} {p.method === 'F12' ? ` (${p.f12ClientName})` : ''}</span><span className={`text-xs font-black text-${p.method === 'F12' ? 'purple' : 'red'}-600 font-mono`}>R$ {formatCurrency(p.amount)}</span></div>))}</div></div></div></div>)}
 
       {reprintSale && (
         <div className="fixed inset-0 flex items-center justify-center p-6 z-[150] animate-in fade-in no-print-overlay">
@@ -4275,7 +4252,7 @@ const ReportsViewComponent = ({ user, sales, setSales, products, setProducts, se
                         <div key={idx} className="flex justify-between items-start leading-tight">
                             <span className="flex-1 pr-4 uppercase">
                                 {it.quantity}x {it.name}
-                                {it.size && <span className="text-[8px] block text-zinc-400">QLD: {it.size} | COR: {it.color}</span>}
+                                {it.size && <span className="text-[8px] block text-zinc-400">QLD: {it.size}</span>}
                             </span>
                             <span className="font-black">R$ {formatCurrency((it.price * it.quantity) - it.discountValue - it.manualDiscountValue)}</span>
                         </div>
