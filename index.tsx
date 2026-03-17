@@ -13,7 +13,7 @@ import {
   History, Clock, UserCheck, RotateCcw, Award, Zap, Calculator, Trophy, Star, Medal,
   ChevronLeft, ChevronRight, ListOrdered, Download, Upload, Save, FileWarning,
   Megaphone, CalendarDays, CheckCircle2, TicketPercent, Gift, ShieldCheck as ShieldIcon,
-  Printer, Check, Key, Shield, Monitor, UserPlus, HandCoins, Share2, FileText, Target, Cake
+  Printer, Check, Key, Shield, Monitor, UserPlus, HandCoins, Share2, FileText, Target, Cake, Bike
 } from 'lucide-react';
 
 // --- CONFIGURAÇÃO DE SEGURANÇA (CHAVES DE ACESSO) ---
@@ -88,6 +88,7 @@ interface AppSettings {
   sellerPermissions: string[]; 
   storeAddress?: string;
   storeCnpj?: string;
+  storePhone?: string;
   storeName?: string; 
   storeTagline?: string; 
 }
@@ -249,10 +250,11 @@ const DEFAULT_SETTINGS: AppSettings = {
     creditInstallments: 4.99
   },
   sellerPermissions: ['exchange_sale'],
-  storeAddress: 'Rua da Moda, 123 - Centro',
-  storeCnpj: '00.000.000/0001-00',
-  storeName: 'SCARD SYS',
-  storeTagline: 'ENTERPRISE SOLUTION'
+  storeAddress: '',
+  storeCnpj: '',
+  storePhone: '',
+  storeName: '',
+  storeTagline: ''
 };
 
 const INITIAL_CATEGORIES = [
@@ -803,6 +805,7 @@ const App = () => {
               customers={customers} 
               setCustomers={setCustomers} 
               sales={sales}
+              settings={settings}
             />
           )}
           {currentView === 'product_search' && (
@@ -1667,12 +1670,18 @@ const maskDate = (value: string) => {
 };
 
 
-const CustomerManagementView = ({ customers, setCustomers, sales }: any) => {
+const CustomerManagementView = ({ customers, setCustomers, sales, settings }: any) => {
   const [modal, setModal] = useState(false);
   const [showBirthdays, setShowBirthdays] = useState(false);
   const [form, setForm] = useState<any>({ name: '', document: '', email: '', phone: '', address: '', birthDate: '' });
   const [search, setSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+
+  const handleCopyDelivery = (c: Customer) => {
+    const text = `👤 *CLIENTE:* ${c.name}\n📍 *ENDEREÇO:* ${c.address || 'Não informado'}\n📞 *CONTATO LM PARTS:* ${settings?.storePhone || 'Não informado'}`;
+    navigator.clipboard.writeText(text);
+    alert('Dados de entrega copiados!');
+  };
 
   const isBirthdayToday = (birthDate: string) => {
     if (!birthDate) return false;
@@ -1791,6 +1800,13 @@ const CustomerManagementView = ({ customers, setCustomers, sales }: any) => {
                     <td className="px-8 py-5 text-right font-black text-zinc-900 text-sm">R$ {formatCurrency(c.totalSpent)}</td>
                     <td className="px-8 py-5">
                       <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleCopyDelivery(c); }} 
+                          className="p-2 text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"
+                          title="Copiar para Entrega"
+                        >
+                          <Bike size={16}/>
+                        </button>
                         <button onClick={(e) => { e.stopPropagation(); setForm(c); setModal(true); }} className="p-2 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"><Edit size={16}/></button>
                         <button onClick={(e) => { e.stopPropagation(); handleDelete(c.id); }} className="p-2 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={16}/></button>
                       </div>
@@ -1999,6 +2015,21 @@ const SalesViewComponent = ({ user, products, setProducts, setSales, setMovement
       return now >= start && now <= end && c.productIds?.includes(productId);
     });
   }, [campaigns]);
+
+  const handleCopyDeliveryFromReceipt = () => {
+    if (!receiptData || !receiptData.customerId) {
+        alert('Nenhum cliente selecionado para esta venda.');
+        return;
+    }
+    const customer = (customers || []).find((c: any) => c.id === receiptData.customerId);
+    if (!customer) {
+        alert('Cliente não encontrado.');
+        return;
+    }
+    const text = `👤 *CLIENTE:* ${customer.name}\n📍 *ENDEREÇO:* ${customer.address || 'Não informado'}\n📞 *CONTATO LM PARTS:* ${settings?.storePhone || 'Não informado'}`;
+    navigator.clipboard.writeText(text);
+    alert('Dados de entrega copiados!');
+  };
 
   const applyAutomaticCampaigns = useCallback((currentCart: SaleItem[]) => {
     let newCart = [...currentCart];
@@ -2264,24 +2295,6 @@ const SalesViewComponent = ({ user, products, setProducts, setSales, setMovement
       ));
     }
 
-    const f12Payments = appliedPayments.filter(p => p.method === 'F12');
-    if (f12Payments.length > 0) {
-       const newFiados: FiadoRecord[] = f12Payments.map(p => ({
-          id: Math.random().toString(36).substr(2, 9),
-          saleId: sale.id,
-          clientName: p.f12ClientName || 'Desconhecido',
-          description: p.f12Description || 'Sem observação',
-          totalAmount: p.amount,
-          remainingAmount: p.amount,
-          createdAt: new Date().toISOString(),
-          dueDate: p.f12DueDate || new Date().toISOString(),
-          vendedor: assignedVendedor,
-          status: 'pending',
-          items: [...cart]
-       }));
-       setFiados((prev: FiadoRecord[]) => [...newFiados, ...prev]);
-    }
-
     setProducts(products.map((p: Product) => {
       const items = cart.filter(i => i.productId === p.id);
       const totalQty = items.reduce((acc, i) => acc + i.quantity, 0);
@@ -2325,28 +2338,17 @@ const SalesViewComponent = ({ user, products, setProducts, setSales, setMovement
   const addPayment = () => {
     if (currentPayAmount <= 0) return;
     
-    if (currentPayMethod === 'F12') {
-       if (!f12Client.trim()) {
-          alert('Por favor, informe o nome do cliente para o registro F12.');
-          return;
-       }
-    }
-
     let net = currentPayAmount;
     if (currentPayMethod === 'C. Débito') net = currentPayAmount * (1 - settings.cardFees.debit / 100);
     else if (currentPayMethod === 'C. Crédito') net = currentPayAmount * (1 - settings.cardFees.credit1x / 100);
     else if (currentPayMethod === 'C. Parcelado') net = currentPayAmount * (1 - settings.cardFees.creditInstallments / 100);
-    else if (currentPayMethod === 'F12') net = 0; 
     
     setAppliedPayments([...appliedPayments, { 
       method: currentPayMethod, 
       amount: currentPayAmount,
       installments: currentPayMethod === 'C. Parcelado' ? installments : undefined,
       installmentValue: currentPayMethod === 'C. Parcelado' ? calculatedInstallment : undefined,
-      netAmount: parseFloat(net.toFixed(2)),
-      f12ClientName: currentPayMethod === 'F12' ? f12Client.trim().toUpperCase() : undefined,
-      f12Description: currentPayMethod === 'F12' ? f12Desc.trim() : undefined,
-      f12DueDate: currentPayMethod === 'F12' ? f12Date : undefined
+      netAmount: parseFloat(net.toFixed(2))
     }]);
 
     setF12Client('');
@@ -2735,44 +2737,8 @@ const SalesViewComponent = ({ user, products, setProducts, setSales, setMovement
                         const val = e.target.value;
                         setCurrentPayMethod(val);
                     }}>
-                      <option>Pix</option><option>Dinheiro</option><option>C. Débito</option><option>C. Crédito</option><option>C. Parcelado</option><option>F12</option>
+                      <option>Pix</option><option>Dinheiro</option><option>C. Débito</option><option>C. Crédito</option><option>C. Parcelado</option>
                     </select>
-
-                    {currentPayMethod === 'F12' && (
-                        <div className="animate-in fade-in slide-in-from-top-1 bg-red-50 p-3 rounded-lg border border-red-200 space-y-2">
-                           <div>
-                              <label className="text-[8px] font-black uppercase text-red-600">Nome do Cliente</label>
-                              <input 
-                                type="text" 
-                                placeholder="CLIENTE AMIGO"
-                                className="w-full border rounded-md px-2 py-1.5 text-[10px] font-black uppercase bg-white outline-none focus:border-red-400 mt-0.5"
-                                value={f12Client}
-                                onChange={e => setF12Client(e.target.value.toUpperCase())}
-                              />
-                           </div>
-                           <div className="grid grid-cols-2 gap-2">
-                              <div>
-                                 <label className="text-[8px] font-black uppercase text-red-600">Vencimento</label>
-                                 <input 
-                                    type="date" 
-                                    className="w-full border rounded-md px-2 py-1 text-[10px] font-black bg-white outline-none focus:border-red-400 mt-0.5"
-                                    value={f12Date}
-                                    onChange={e => setF12Date(e.target.value)}
-                                 />
-                              </div>
-                              <div>
-                                 <label className="text-[8px] font-black uppercase text-red-600">Condições/Desc.</label>
-                                 <input 
-                                    type="text" 
-                                    placeholder="Ex: 2x no mês"
-                                    className="w-full border rounded-md px-2 py-1 text-[10px] font-black bg-white outline-none focus:border-red-400 mt-0.5"
-                                    value={f12Desc}
-                                    onChange={e => setF12Desc(e.target.value)}
-                                 />
-                              </div>
-                           </div>
-                        </div>
-                    )}
 
                     {currentPayMethod === 'C. Parcelado' && (
                       <div className="animate-in fade-in slide-in-from-top-1 space-y-1 bg-zinc-50 p-2 rounded-lg border border-zinc-200">
@@ -2797,7 +2763,7 @@ const SalesViewComponent = ({ user, products, setProducts, setSales, setMovement
                           onChange={e => setCurrentPayAmount(parseCurrency(e.target.value))} 
                         />
                       </div>
-                      <button type="button" onClick={addPayment} className={`px-3 ${currentPayMethod === 'F12' ? 'bg-red-600 hover:bg-red-700' : 'bg-red-600 hover:bg-red-700'} text-white rounded-lg active:scale-90 flex items-center justify-center shadow transition-all`} title="Adicionar Pagamento"><Plus size={16}/></button>
+                      <button type="button" onClick={addPayment} className="px-3 bg-red-600 hover:bg-red-700 text-white rounded-lg active:scale-90 flex items-center justify-center shadow transition-all" title="Adicionar Pagamento"><Plus size={16}/></button>
                     </div>
                     {appliedPayments.length > 0 && (
                       <div className="mt-3 bg-red-50/50 p-3 rounded-xl border border-dashed border-red-200 space-y-2 animate-in fade-in">
@@ -2858,6 +2824,7 @@ const SalesViewComponent = ({ user, products, setProducts, setSales, setMovement
                     <p className="text-[9px] uppercase tracking-[0.2em] opacity-60">{settings.storeTagline || 'ENTERPRISE SOLUTION'}</p>
                     <p className="text-[8px] opacity-40">{settings.storeAddress || 'Rua da Moda, 123 - Centro'}</p>
                     {settings.storeCnpj && <p className="text-[8px] opacity-40">CNPJ: {settings.storeCnpj}</p>}
+                    {settings.storePhone && <p className="text-[8px] opacity-40">TEL: {settings.storePhone}</p>}
                 </div>
                 
                 <div className="pt-2 border-t border-zinc-200 flex justify-between items-center text-[10px] font-bold">
@@ -2926,6 +2893,15 @@ const SalesViewComponent = ({ user, products, setProducts, setSales, setMovement
                     <p className="text-[8px] mt-4 opacity-40">Obrigado pela preferência!</p>
                 </div>
              </div>
+
+             {receiptData.customerId && (
+                <button 
+                  onClick={handleCopyDeliveryFromReceipt}
+                  className="w-full py-3 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-2xl font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 hover:bg-emerald-100 transition-all active:scale-95"
+                >
+                  <Bike size={16} /> Copiar Dados para Entrega
+                </button>
+             )}
 
              <div className="flex gap-3 pt-2">
                 <button 
@@ -4236,6 +4212,7 @@ const ReportsViewComponent = ({ user, sales, setSales, products, setProducts, se
                     <p className="text-[9px] uppercase tracking-[0.2em] opacity-60">{settings.storeTagline || 'ENTERPRISE SOLUTION'}</p>
                     <p className="text-[8px] opacity-40">{settings.storeAddress || 'Rua da Moda, 123 - Centro'}</p>
                     {settings.storeCnpj && <p className="text-[8px] opacity-40">CNPJ: {settings.storeCnpj}</p>}
+                    {settings.storePhone && <p className="text-[8px] opacity-40">TEL: {settings.storePhone}</p>}
                 </div>
                 
                 <div className="pt-2 border-t border-zinc-200 flex justify-between items-center text-[10px] font-bold">
@@ -4340,6 +4317,7 @@ const SettingsViewComponent = ({ settings, setSettings, categories, setCategorie
     sellerPermissions: settings?.sellerPermissions ?? DEFAULT_SETTINGS.sellerPermissions,
     storeAddress: settings?.storeAddress ?? DEFAULT_SETTINGS.storeAddress,
     storeCnpj: settings?.storeCnpj ?? DEFAULT_SETTINGS.storeCnpj,
+    storePhone: settings?.storePhone ?? DEFAULT_SETTINGS.storePhone,
     storeName: settings?.storeName ?? DEFAULT_SETTINGS.storeName,
     storeTagline: settings?.storeTagline ?? DEFAULT_SETTINGS.storeTagline
   });
@@ -4368,11 +4346,42 @@ const SettingsViewComponent = ({ settings, setSettings, categories, setCategorie
                   </div>
                   <div className="md:col-span-2">
                     <label className="text-[9px] font-black text-zinc-400 uppercase block mb-1">Endereço Completo</label>
-                    <input type="text" className="w-full border-2 rounded-xl px-4 py-3 text-zinc-800 font-bold text-sm" value={localSettings.storeAddress} onChange={e => setLocalSettings({...localSettings, storeAddress: e.target.value})} placeholder="Rua ..., Nº ..., Bairro, Cidade-UF" />
+                    <input type="text" className="w-full border-2 rounded-xl px-4 py-3 text-zinc-800 font-bold text-sm" value={localSettings.storeAddress} onChange={e => setLocalSettings({...localSettings, storeAddress: e.target.value})} placeholder="Rua da Moda, 123 - Centro" />
                   </div>
                   <div className="md:col-span-2">
                     <label className="text-[9px] font-black text-zinc-400 uppercase block mb-1">CNPJ</label>
-                    <input type="text" className="w-full border-2 rounded-xl px-4 py-3 text-zinc-800 font-bold text-sm" value={localSettings.storeCnpj} onChange={e => setLocalSettings({...localSettings, storeCnpj: e.target.value})} placeholder="00.000.000/0001-00" />
+                    <input 
+                      type="text" 
+                      className="w-full border-2 rounded-xl px-4 py-3 text-zinc-800 font-bold text-sm" 
+                      value={localSettings.storeCnpj} 
+                      onChange={e => {
+                        let val = e.target.value.replace(/\D/g, '');
+                        if (val.length > 14) val = val.slice(0, 14);
+                        if (val.length > 12) val = `${val.slice(0, 2)}.${val.slice(2, 5)}.${val.slice(5, 8)}/${val.slice(8, 12)}-${val.slice(12)}`;
+                        else if (val.length > 8) val = `${val.slice(0, 2)}.${val.slice(2, 5)}.${val.slice(5, 8)}/${val.slice(8)}`;
+                        else if (val.length > 5) val = `${val.slice(0, 2)}.${val.slice(2, 5)}.${val.slice(5)}`;
+                        else if (val.length > 2) val = `${val.slice(0, 2)}.${val.slice(2)}`;
+                        setLocalSettings({...localSettings, storeCnpj: val});
+                      }} 
+                      placeholder="00.000.000/0001-00" 
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="text-[9px] font-black text-zinc-400 uppercase block mb-1">Telefone</label>
+                    <input 
+                      type="text" 
+                      className="w-full border-2 rounded-xl px-4 py-3 text-zinc-800 font-bold text-sm" 
+                      value={localSettings.storePhone} 
+                      onChange={e => {
+                        let val = e.target.value.replace(/\D/g, '');
+                        if (val.length > 11) val = val.slice(0, 11);
+                        if (val.length > 2) val = `(${val.slice(0, 2)}) ${val.slice(2)}`;
+                        if (val.length > 6) val = `${val.slice(0, 6)} ${val.slice(6)}`;
+                        if (val.length > 11) val = `${val.slice(0, 11)}-${val.slice(11)}`;
+                        setLocalSettings({...localSettings, storePhone: val});
+                      }} 
+                      placeholder="(00) 0 0000-0000" 
+                    />
                   </div>
                 </div>
               </div>
@@ -4518,7 +4527,7 @@ const TeamViewComponent = ({ currentUser, users, setUsers }: any) => {
               <div className="space-y-1">
                  <label className="text-[8px] font-black text-zinc-400 uppercase ml-1">Nível de Acesso</label>
                  <select 
-                   disabled={editModal.id === 0 || !isMaster} 
+                   disabled={editModal.id === 0 || (currentUser.role !== 'admin' && !isMaster)} 
                    className="w-full border-2 rounded-xl px-4 py-3 text-sm font-bold bg-zinc-50/50 appearance-none disabled:opacity-50"
                    value={editModal.role}
                    onChange={e => setEditModal({...editModal, role: e.target.value as UserRole})}
