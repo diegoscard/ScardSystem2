@@ -1678,7 +1678,7 @@ const CustomerManagementView = ({ customers, setCustomers, sales, settings }: an
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
 
   const handleCopyDelivery = (c: Customer) => {
-    const text = `👤 *CLIENTE:* ${c.name}\n📍 *ENDEREÇO:* ${c.address || 'Não informado'}\n📞 *CONTATO LM PARTS:* ${settings?.storePhone || 'Não informado'}`;
+    const text = `👤 *CLIENTE:* ${c.name}\n📍 *ENDEREÇO:* ${c.address || 'Não informado'}`;
     navigator.clipboard.writeText(text);
     alert('Dados de entrega copiados!');
   };
@@ -2026,7 +2026,7 @@ const SalesViewComponent = ({ user, products, setProducts, setSales, setMovement
         alert('Cliente não encontrado.');
         return;
     }
-    const text = `👤 *CLIENTE:* ${customer.name}\n📍 *ENDEREÇO:* ${customer.address || 'Não informado'}\n📞 *CONTATO LM PARTS:* ${settings?.storePhone || 'Não informado'}`;
+    const text = `👤 *CLIENTE:* ${customer.name}\n📍 *ENDEREÇO:* ${customer.address || 'Não informado'}`;
     navigator.clipboard.writeText(text);
     alert('Dados de entrega copiados!');
   };
