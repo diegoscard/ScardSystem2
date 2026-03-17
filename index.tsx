@@ -721,7 +721,7 @@ const App = () => {
             <span className="font-black uppercase text-[9px] tracking-widest">Salvar Backup</span>
           </button>
           {isMasterUser && (
-            <button type="button" title="Restaurar dados de um arquivo de backup" onClick={() => fileInputRef.current?.click()} className="flex items-center space-x-3 text-orange-400 hover:text-orange-300 transition-all w-full px-4 py-2.5 rounded-xl hover:bg-orange-400/5 group">
+            <button type="button" title="Restaurar dados de um arquivo de backup" onClick={() => fileInputRef.current?.click()} className="flex items-center space-x-3 text-[#3cbffb] hover:opacity-80 transition-all w-full px-4 py-2.5 rounded-xl hover:bg-[#3cbffb]/5 group">
               <Upload size={16} />
               <span className="font-black uppercase text-[9px] tracking-widest">Restaurar Backup</span>
               <input ref={fileInputRef} type="file" accept=".json,.scard" className="hidden" onChange={handleImportBackup} />
