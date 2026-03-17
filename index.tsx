@@ -1805,7 +1805,11 @@ const CustomerManagementView = ({ customers, setCustomers, sales, settings }: an
                           className="p-2 text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"
                           title="Copiar para Entrega"
                         >
-                          <Bike size={16}/>
+                          <div className="relative">
+                            <Bike size={16}/>
+                            <div className="absolute -top-1 -left-1 w-2.5 h-2.5 bg-current rounded-sm opacity-20" />
+                            <div className="absolute -top-1 -left-1 w-2.5 h-2.5 border border-current rounded-sm" />
+                          </div>
                         </button>
                         <button onClick={(e) => { e.stopPropagation(); setForm(c); setModal(true); }} className="p-2 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"><Edit size={16}/></button>
                         <button onClick={(e) => { e.stopPropagation(); handleDelete(c.id); }} className="p-2 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={16}/></button>
@@ -2899,7 +2903,11 @@ const SalesViewComponent = ({ user, products, setProducts, setSales, setMovement
                   onClick={handleCopyDeliveryFromReceipt}
                   className="w-full py-3 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-2xl font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 hover:bg-emerald-100 transition-all active:scale-95"
                 >
-                  <Bike size={16} /> Copiar Dados para Entrega
+                  <div className="relative">
+                    <Bike size={16} />
+                    <div className="absolute -top-1 -left-1 w-2.5 h-2.5 bg-current rounded-sm opacity-20" />
+                    <div className="absolute -top-1 -left-1 w-2.5 h-2.5 border border-current rounded-sm" />
+                  </div> Copiar Dados para Entrega
                 </button>
              )}
 
