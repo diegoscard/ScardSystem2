@@ -1804,7 +1804,7 @@ const CustomerManagementView = ({ customers, setCustomers, sales, settings }: an
         >
           <UserPlus size={18} /> Novo Cliente
         </button>
-      </div>
+        </div>
 
       <div className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-zinc-100 space-y-4 shrink-0">
         <div className="flex flex-wrap gap-4 items-center justify-between">
@@ -2005,7 +2005,7 @@ const CustomerManagementView = ({ customers, setCustomers, sales, settings }: an
 
       {modal && (
         <div className="fixed inset-0 flex items-center justify-center p-6 z-[200] animate-in fade-in">
-          <div className="absolute inset-0 bg-zinc-950/60 backdrop-blur-sm" onClick={() => setModal(false)}></div>
+          <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => setModal(false)}></div>
           <div className="bg-white p-6 rounded-3xl w-full max-w-md shadow-2xl relative z-10 space-y-4 border border-zinc-100">
             <div className="flex justify-between items-center border-b pb-4">
               <h3 className="text-xl font-black text-zinc-900 uppercase italic flex items-center gap-3">
