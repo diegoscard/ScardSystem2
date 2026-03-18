@@ -18,7 +18,7 @@ import {
 
 // --- CONFIGURAÇÃO DE SEGURANÇA (CHAVES DE ACESSO) ---
 const VALID_ACCESS_KEYS = [
-  'QJ4UC-6G0HA-25T07-0KK4R-SJPPA', //-- LM PARTS
+  'QJ4UC-6G0HA-25T07-0KK4R-SJPPB', //-- LM PARTS
   'Master',
 ];
 
@@ -62,6 +62,8 @@ interface Customer {
   email: string;
   phone: string;
   address: string;
+  addressNumber?: string;
+  cep?: string;
   birthDate: string; // DD/MM/YYYY
   createdAt: string;
   totalSpent: number;
@@ -1669,16 +1671,52 @@ const maskDate = (value: string) => {
   return v.replace(/(\d{2})(\d{2})(\d{4})/, '$1/$2/$3');
 };
 
+const maskCEP = (value: string) => {
+  const v = value.replace(/\D/g, '');
+  return v.replace(/(\d{5})(\d{3})/, '$1-$2');
+};
+
 
 const CustomerManagementView = ({ customers, setCustomers, sales, settings }: any) => {
   const [modal, setModal] = useState(false);
   const [showBirthdays, setShowBirthdays] = useState(false);
-  const [form, setForm] = useState<any>({ name: '', document: '', email: '', phone: '', address: '', birthDate: '' });
+  const [form, setForm] = useState<any>({ name: '', document: '', email: '', phone: '', address: '', birthDate: '', cep: '', addressNumber: '' });
   const [search, setSearch] = useState('');
+  const [period, setPeriod] = useState<'day' | 'month' | 'year'>('day');
+  const [selectedDay, setSelectedDay] = useState(new Date().toISOString().slice(0, 10));
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
+  const [isFiltering, setIsFiltering] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [isSearchingCEP, setIsSearchingCEP] = useState(false);
+
+  const handleCEPLookup = async (cep: string) => {
+    const cleanCEP = cep.replace(/\D/g, '');
+    if (cleanCEP.length === 8) {
+      setIsSearchingCEP(true);
+      try {
+        const response = await fetch(`https://viacep.com.br/ws/${cleanCEP}/json/`);
+        const data = await response.json();
+        if (!data.erro) {
+          setForm((prev: any) => ({
+            ...prev,
+            address: `${data.logradouro}, ${data.bairro}, ${data.localidade} - ${data.uf}`
+          }));
+        } else {
+          alert('CEP não encontrado.');
+        }
+      } catch (error) {
+        console.error('Erro ao buscar CEP:', error);
+        alert('Erro ao buscar CEP. Verifique sua conexão.');
+      } finally {
+        setIsSearchingCEP(false);
+      }
+    }
+  };
 
   const handleCopyDelivery = (c: Customer) => {
-    const text = `👤 *CLIENTE:* ${c.name}\n📍 *ENDEREÇO:* ${c.address || 'Não informado'}`;
+    const addressWithNumber = c.addressNumber ? `${c.address}, Nº ${c.addressNumber}` : c.address;
+    const text = `👤 *CLIENTE:* ${c.name}\n📍 *ENDEREÇO:* ${addressWithNumber || 'Não informado'}`;
     navigator.clipboard.writeText(text);
     alert('Dados de entrega copiados!');
   };
@@ -1688,6 +1726,28 @@ const CustomerManagementView = ({ customers, setCustomers, sales, settings }: an
     const today = new Date();
     const [day, month] = birthDate.split('/');
     return parseInt(day) === today.getDate() && parseInt(month) === today.getMonth() + 1;
+  };
+
+  const getCustomerSpendingInPeriod = (customerId: number) => {
+    if (!isFiltering) return null;
+    
+    return (sales || []).filter((s: Sale) => {
+      if (s.customerId !== customerId) return false;
+      const d = new Date(s.date);
+      
+      if (period === 'day') {
+        const [y, m, day] = selectedDay.split('-').map(Number);
+        return d.getFullYear() === y && (d.getMonth() + 1) === m && d.getDate() === day;
+      }
+      if (period === 'month') {
+        const [y, m] = selectedMonth.split('-').map(Number);
+        return d.getFullYear() === y && (d.getMonth() + 1) === m;
+      }
+      if (period === 'year') {
+        return d.getFullYear() === Number(selectedYear);
+      }
+      return true;
+    }).reduce((acc: number, s: Sale) => acc + s.total, 0);
   };
 
   const filtered = customers.filter((c: Customer) => {
@@ -1712,7 +1772,7 @@ const CustomerManagementView = ({ customers, setCustomers, sales, settings }: an
       setCustomers([newCustomer, ...customers]);
     }
     setModal(false);
-    setForm({ name: '', document: '', email: '', phone: '', address: '' });
+    setForm({ name: '', document: '', email: '', phone: '', address: '', birthDate: '', cep: '', addressNumber: '' });
   };
 
   const handleDelete = (id: number) => {
@@ -1739,29 +1799,90 @@ const CustomerManagementView = ({ customers, setCustomers, sales, settings }: an
           <Cake size={18} /> Aniversariantes do Dia
         </button>
         <button 
-          onClick={() => { setForm({ name: '', document: '', email: '', phone: '', address: '', birthDate: '' }); setModal(true); }}
+          onClick={() => { setForm({ name: '', document: '', email: '', phone: '', address: '', birthDate: '', cep: '', addressNumber: '' }); setModal(true); }}
           className="bg-red-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] shadow-xl shadow-red-100 hover:bg-red-700 active:scale-95 transition-all flex items-center gap-3"
         >
           <UserPlus size={18} /> Novo Cliente
         </button>
       </div>
 
-      <div className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-zinc-100 space-y-6 shrink-0">
-        <div className="relative group">
-          <Search size={20} className="absolute left-6 top-1/2 -translate-y-1/2 text-zinc-300 group-focus-within:text-red-500 transition-colors" />
-          <input 
-            type="text" 
-            placeholder="Buscar por nome, CPF/CNPJ ou telefone..." 
-            className="w-full pl-16 pr-6 py-5 bg-zinc-50 rounded-2xl border-2 border-zinc-100 focus:border-red-500 outline-none transition-all font-bold text-sm"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+      <div className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-zinc-100 space-y-4 shrink-0">
+        <div className="flex flex-wrap gap-4 items-center justify-between">
+          <div className="flex-1 min-w-[300px] relative group">
+            <Search size={20} className="absolute left-6 top-1/2 -translate-y-1/2 text-zinc-300 group-focus-within:text-red-500 transition-colors" />
+            <input 
+              type="text" 
+              placeholder="Buscar por nome, CPF/CNPJ ou telefone..." 
+              className="w-full pl-16 pr-6 py-4 bg-zinc-50 rounded-2xl border-2 border-zinc-100 focus:border-red-500 outline-none transition-all font-bold text-sm"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex items-center gap-3">
+              <div className="flex bg-zinc-50 p-1.5 rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
+                {(['day', 'month', 'year'] as const).map((p) => (
+                  <button 
+                    key={p} 
+                    onClick={() => { setPeriod(p); setIsFiltering(true); }} 
+                    className={`px-6 py-2 rounded-xl text-[9px] font-black uppercase transition-all ${isFiltering && period === p ? 'bg-red-600 text-white shadow-lg shadow-red-100' : 'text-zinc-400 hover:bg-zinc-100'}`}
+                  >
+                    {p === 'day' ? 'DIA' : p === 'month' ? 'MÊS' : 'ANO'}
+                  </button>
+                ))}
+              </div>
+              {isFiltering && (
+                <button 
+                  onClick={() => setIsFiltering(false)}
+                  className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                  title="Desativar Filtro de Período"
+                >
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+            
+            {isFiltering && (
+              <div className="flex items-center gap-3 animate-in fade-in slide-in-from-top-1">
+                {period === 'day' && (
+                  <div className="flex items-center gap-2 bg-red-50 px-3 py-1.5 rounded-xl border border-red-100">
+                    <span className="text-[8px] font-black text-red-400 uppercase tracking-widest">DIA:</span>
+                    <input type="date" value={selectedDay} onChange={(e) => setSelectedDay(e.target.value)} className="bg-transparent text-[11px] font-black text-red-700 outline-none cursor-pointer" />
+                  </div>
+                )}
+                {period === 'month' && (
+                  <div className="flex items-center gap-2 bg-red-50 px-3 py-1.5 rounded-xl border border-red-100">
+                    <span className="text-[8px] font-black text-red-400 uppercase tracking-widest">MÊS:</span>
+                    <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="bg-transparent text-[11px] font-black text-red-700 outline-none cursor-pointer" />
+                  </div>
+                )}
+                {period === 'year' && (
+                  <div className="flex items-center gap-2 bg-red-50 px-3 py-1.5 rounded-xl border border-red-100">
+                    <span className="text-[8px] font-black text-red-400 uppercase tracking-widest">ANO:</span>
+                    <input type="number" min="2000" max="2100" value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="bg-transparent text-[11px] font-black text-red-700 outline-none cursor-pointer w-16" />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       <div className="flex-1 overflow-hidden flex gap-6">
         <div className="flex-1 bg-white rounded-[2.5rem] border border-zinc-100 overflow-hidden flex flex-col">
           <div className="overflow-auto custom-scroll flex-1">
+            { isFiltering && (
+              <div className="px-8 py-4 bg-red-50 border-b border-red-100 flex justify-between items-center sticky top-0 z-20">
+                <div className="flex items-center gap-2">
+                  <TrendingUp size={16} className="text-red-600" />
+                  <span className="text-[10px] font-black text-red-600 uppercase tracking-widest">Total no Período Selecionado</span>
+                </div>
+                <span className="text-lg font-black text-red-600">
+                  R$ {formatCurrency(filtered.reduce((acc: number, c: Customer) => acc + (getCustomerSpendingInPeriod(c.id) || 0), 0))}
+                </span>
+              </div>
+            )}
             <table className="w-full text-left border-separate border-spacing-0">
               <thead className="bg-zinc-50 sticky top-0 z-10">
                 <tr>
@@ -1797,7 +1918,16 @@ const CustomerManagementView = ({ customers, setCustomers, sales, settings }: an
                         <p className="text-[10px] text-zinc-400">{c.email}</p>
                       </div>
                     </td>
-                    <td className="px-8 py-5 text-right font-black text-zinc-900 text-sm">R$ {formatCurrency(c.totalSpent)}</td>
+                    <td className="px-8 py-5 text-right font-black text-zinc-900 text-sm">
+                      {isFiltering ? (
+                        <div className="flex flex-col items-end">
+                          <span className="text-red-600">R$ {formatCurrency(getCustomerSpendingInPeriod(c.id) || 0)}</span>
+                          <span className="text-[9px] text-zinc-400 uppercase font-black">No Período</span>
+                        </div>
+                      ) : (
+                        <span>R$ {formatCurrency(c.totalSpent)}</span>
+                      )}
+                    </td>
                     <td className="px-8 py-5">
                       <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
                         <button 
@@ -1876,76 +2006,108 @@ const CustomerManagementView = ({ customers, setCustomers, sales, settings }: an
       {modal && (
         <div className="fixed inset-0 flex items-center justify-center p-6 z-[200] animate-in fade-in">
           <div className="absolute inset-0 bg-zinc-950/60 backdrop-blur-sm" onClick={() => setModal(false)}></div>
-          <div className="bg-white p-10 rounded-[3rem] w-full max-w-lg shadow-2xl relative z-10 space-y-8 border border-zinc-100">
-            <div className="flex justify-between items-center border-b pb-6">
-              <h3 className="text-2xl font-black text-zinc-900 uppercase italic flex items-center gap-3">
-                <UserPlus size={28} className="text-red-600" /> {form.id ? 'Editar Cliente' : 'Novo Cliente'}
+          <div className="bg-white p-6 rounded-3xl w-full max-w-md shadow-2xl relative z-10 space-y-4 border border-zinc-100">
+            <div className="flex justify-between items-center border-b pb-4">
+              <h3 className="text-xl font-black text-zinc-900 uppercase italic flex items-center gap-3">
+                <UserPlus size={24} className="text-red-600" /> {form.id ? 'Editar Cliente' : 'Novo Cliente'}
               </h3>
-              <button onClick={() => setModal(false)} className="text-zinc-300 hover:text-zinc-500 transition-colors"><X size={24}/></button>
+              <button onClick={() => setModal(false)} className="text-zinc-300 hover:text-zinc-500 transition-colors"><X size={20}/></button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-2 gap-6">
-                <div className="col-span-2 space-y-1.5">
-                  <label className="text-[10px] font-black text-zinc-400 uppercase ml-1">Nome Completo</label>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2 space-y-1">
+                  <label className="text-[9px] font-black text-zinc-400 uppercase ml-1">Nome Completo</label>
                   <input 
                     type="text" 
-                    className="w-full rounded-2xl border-2 border-zinc-100 px-5 py-4 text-zinc-800 bg-zinc-50 focus:border-red-500 outline-none transition-all font-bold text-sm shadow-sm"
+                    className="w-full rounded-xl border-2 border-zinc-100 px-4 py-3 text-zinc-800 bg-zinc-50 focus:border-red-500 outline-none transition-all font-bold text-sm shadow-sm"
                     value={form.name}
                     onChange={e => setForm({ ...form, name: e.target.value })}
                     required
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-zinc-400 uppercase ml-1">CPF / CNPJ</label>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-zinc-400 uppercase ml-1">CPF / CNPJ</label>
                   <input 
                     type="text" 
-                    className="w-full rounded-2xl border-2 border-zinc-100 px-5 py-4 text-zinc-800 bg-zinc-50 focus:border-red-500 outline-none transition-all font-bold text-sm shadow-sm"
+                    className="w-full rounded-xl border-2 border-zinc-100 px-4 py-3 text-zinc-800 bg-zinc-50 focus:border-red-500 outline-none transition-all font-bold text-sm shadow-sm"
                     value={form.document || ''}
                     onChange={e => setForm({ ...form, document: maskCPFCNPJ(e.target.value) })}
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-zinc-400 uppercase ml-1">Telefone</label>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-zinc-400 uppercase ml-1">Telefone</label>
                   <input 
                     type="text" 
-                    className="w-full rounded-2xl border-2 border-zinc-100 px-5 py-4 text-zinc-800 bg-zinc-50 focus:border-red-500 outline-none transition-all font-bold text-sm shadow-sm"
+                    className="w-full rounded-xl border-2 border-zinc-100 px-4 py-3 text-zinc-800 bg-zinc-50 focus:border-red-500 outline-none transition-all font-bold text-sm shadow-sm"
                     value={form.phone || ''}
                     onChange={e => setForm({ ...form, phone: maskPhone(e.target.value) })}
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-zinc-400 uppercase ml-1">Data de Nascimento</label>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-zinc-400 uppercase ml-1">Data de Nascimento</label>
                   <input 
                     type="text" 
                     placeholder="DD/MM/AAAA"
-                    className="w-full rounded-2xl border-2 border-zinc-100 px-5 py-4 text-zinc-800 bg-zinc-50 focus:border-red-500 outline-none transition-all font-bold text-sm shadow-sm"
+                    className="w-full rounded-xl border-2 border-zinc-100 px-4 py-3 text-zinc-800 bg-zinc-50 focus:border-red-500 outline-none transition-all font-bold text-sm shadow-sm"
                     value={form.birthDate || ''}
                     onChange={e => setForm({ ...form, birthDate: maskDate(e.target.value) })}
                   />
                 </div>
-                <div className="col-span-2 space-y-1.5">
-                  <label className="text-[10px] font-black text-zinc-400 uppercase ml-1">E-mail</label>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-zinc-400 uppercase ml-1">E-mail</label>
                   <input 
                     type="email" 
-                    className="w-full rounded-2xl border-2 border-zinc-100 px-5 py-4 text-zinc-800 bg-zinc-50 focus:border-red-500 outline-none transition-all font-bold text-sm shadow-sm"
+                    className="w-full rounded-xl border-2 border-zinc-100 px-4 py-3 text-zinc-800 bg-zinc-50 focus:border-red-500 outline-none transition-all font-bold text-sm shadow-sm"
                     value={form.email || ''}
                     onChange={e => setForm({ ...form, email: e.target.value })}
                   />
                 </div>
-                <div className="col-span-2 space-y-1.5">
-                  <label className="text-[10px] font-black text-zinc-400 uppercase ml-1">Endereço Completo</label>
+                <div className="col-span-2 grid grid-cols-2 gap-4">
+                  <div className="flex flex-col justify-end">
+                    <label className="text-[9px] font-black text-zinc-400 uppercase ml-1 flex justify-between items-center mb-1">
+                      CEP
+                      {isSearchingCEP && <span className="text-[8px] text-red-500 animate-pulse">Buscando...</span>}
+                    </label>
+                    <input 
+                      type="text" 
+                      placeholder="00000-000"
+                      className="w-full rounded-xl border-2 border-zinc-100 px-4 py-3 text-zinc-800 bg-zinc-50 focus:border-red-500 outline-none transition-all font-bold text-sm shadow-sm"
+                      value={form.cep || ''}
+                      onChange={e => {
+                        const masked = maskCEP(e.target.value);
+                        setForm({ ...form, cep: masked });
+                        if (e.target.value.replace(/\D/g, '').length === 8) {
+                          handleCEPLookup(e.target.value);
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className="flex flex-col justify-end">
+                    <label className="text-[9px] font-black text-zinc-400 uppercase ml-1 mb-1">Número</label>
+                    <input 
+                      type="text" 
+                      placeholder="Nº"
+                      className="w-full rounded-xl border-2 border-zinc-100 px-4 py-3 text-zinc-800 bg-zinc-50 focus:border-red-500 outline-none transition-all font-bold text-sm shadow-sm"
+                      value={form.addressNumber || ''}
+                      onChange={e => setForm({ ...form, addressNumber: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="col-span-2 space-y-1">
+                  <label className="text-[9px] font-black text-zinc-400 uppercase ml-1">Endereço (Via CEP)</label>
                   <textarea 
-                    className="w-full rounded-2xl border-2 border-zinc-100 px-5 py-4 text-zinc-800 bg-zinc-50 focus:border-red-500 outline-none transition-all font-bold text-sm shadow-sm min-h-[100px]"
+                    readOnly
+                    className="w-full rounded-xl border-2 border-zinc-100 px-4 py-3 text-zinc-500 bg-zinc-100 outline-none transition-all font-bold text-xs shadow-sm min-h-[60px] cursor-not-allowed"
                     value={form.address || ''}
-                    onChange={e => setForm({ ...form, address: e.target.value })}
+                    placeholder="O endereço aparecerá aqui após digitar o CEP"
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end gap-3 pt-6 border-t mt-4">
-                <button type="button" onClick={() => setModal(false)} className="px-5 py-2 text-zinc-400 font-black uppercase text-[10px] tracking-widest hover:text-zinc-600 transition-colors">Descartar</button>
-                <button type="submit" className="bg-red-600 text-white px-10 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl shadow-red-100 hover:bg-red-700 active:scale-95 transition-all">
+              <div className="flex justify-end gap-3 pt-4 border-t mt-2">
+                <button type="button" onClick={() => setModal(false)} className="px-5 py-2 text-zinc-400 font-black uppercase text-[9px] tracking-widest hover:text-zinc-600 transition-colors">Descartar</button>
+                <button type="submit" className="bg-red-600 text-white px-8 py-3 rounded-xl font-black uppercase text-[9px] tracking-widest shadow-xl shadow-red-100 hover:bg-red-700 active:scale-95 transition-all">
                   {form.id ? 'Salvar Alterações' : 'Cadastrar Cliente'}
                 </button>
               </div>
