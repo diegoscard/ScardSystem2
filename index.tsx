@@ -150,20 +150,6 @@ interface PaymentRecord {
   f12DueDate?: string;
 }
 
-interface FiadoRecord {
-  id: string;
-  saleId: number;
-  clientName: string;
-  description: string;
-  totalAmount: number;
-  remainingAmount: number;
-  createdAt: string;
-  dueDate: string;
-  vendedor: string;
-  status: 'pending' | 'paid';
-  items: SaleItem[];
-}
-
 interface CashLog {
   id: string;
   type: 'entrada' | 'retirada' | 'venda' | 'abertura' | 'ajuste';
@@ -215,27 +201,6 @@ interface Supplier {
   name: string;
   email: string;
   phone: string;
-}
-
-interface Campaign {
-  id: number;
-  name: string;
-  description: string;
-  type: 'percentage' | 'buy_x_get_y' | 'voucher' | 'bundle' | 'fixed_price';
-  discountPercent: number;
-  pagueX?: number; 
-  leveY?: number;  
-  voucherCode?: string;
-  voucherValue?: number;
-  voucherQuantity?: number;
-  bundleQuantity?: number; // Qtd para o combo (ex: 3)
-  bundlePrice?: number;    // Preço fixo do combo (ex: 100)
-  fixedPriceValue?: number; // Preço fixo por item
-  startDate: string;
-  endDate: string;
-  active: boolean;
-  createdAt: string;
-  productIds: number[]; 
 }
 
 interface CommissionTier {
@@ -301,13 +266,11 @@ const App = () => {
   const [categories, setCategories] = usePersistedState<string[]>('db_categories', INITIAL_CATEGORIES);
   const [movements, setMovements] = usePersistedState<StockMovement[]>('db_movements', []);
   const [sales, setSales] = usePersistedState<Sale[]>('db_sales', []);
-  const [campaigns, setCampaigns] = usePersistedState<Campaign[]>('db_campaigns', []);
   const [cashSession, setCashSession] = usePersistedState<CashSession | null>('db_cash_session', null);
   const [cashHistory, setCashHistory] = usePersistedState<CashHistoryEntry[]>('db_cash_history', []);
   const [settings, setSettings] = usePersistedState<AppSettings>('db_settings', DEFAULT_SETTINGS);
   const [exchangeCredit, setExchangeCredit] = usePersistedState<number>('db_exchange_credit', 0);
   const [keyRegistrations, setKeyRegistrations] = usePersistedState<Record<string, string>>('db_key_registrations', {});
-  const [fiados, setFiados] = usePersistedState<FiadoRecord[]>('db_fiados', []);
   const [currentView, setCurrentView] = useState('dashboard');
   
   const [openingBalanceInput, setOpeningBalanceInput] = useState(0);
@@ -429,7 +392,7 @@ const App = () => {
     const dataKeys = [
       'db_users', 'db_products', 'db_suppliers', 'db_categories', 
       'db_movements', 'db_sales', 'db_cash_session', 'db_cash_history', 
-      'db_settings', 'db_exchange_credit', 'db_campaigns', 'db_key_registrations', 'db_fiados', 'db_customers'
+      'db_settings', 'db_exchange_credit', 'db_key_registrations', 'db_customers'
     ];
     
     const backupData: Record<string, any> = {};
@@ -793,10 +756,6 @@ const App = () => {
                 settings={settings}
                 exchangeCredit={exchangeCredit}
                 setExchangeCredit={setExchangeCredit}
-                campaigns={campaigns}
-                setCampaigns={setCampaigns}
-                fiados={fiados}
-                setFiados={setFiados}
                 customers={customers}
                 setCustomers={setCustomers}
                 setCurrentView={setCurrentView}
@@ -814,16 +773,6 @@ const App = () => {
           {currentView === 'product_search' && (
             <ProductSearchViewComponent products={products} categories={categories} />
           )}
-          {currentView === 'fiado' && (
-             <FiadoManagementView 
-               user={user}
-               fiados={fiados} 
-               setFiados={setFiados} 
-               cashSession={cashSession} 
-               setCashSession={setCashSession} 
-               cashHistory={cashHistory}
-             />
-          )}
           {currentView === 'stock' && (
             <StockManagementView
               user={user}
@@ -835,11 +784,8 @@ const App = () => {
               setCategories={setCategories}
             />
           )}
-          {currentView === 'campaigns' && (
-            <CampaignsViewComponent campaigns={campaigns} setCampaigns={setCampaigns} products={products} />
-          )}
           {currentView === 'dashboard' && (
-            <DashboardViewComponent products={products} sales={sales} cashSession={cashSession} fiados={fiados} cashHistory={cashHistory} />
+            <DashboardViewComponent products={products} sales={sales} cashSession={cashSession} cashHistory={cashHistory} />
           )}
           {currentView === 'reports' && (
             <ReportsViewComponent 
@@ -943,197 +889,6 @@ const NavBtn = ({ active, onClick, icon, label }: any) => (
 );
 
 // --- COMPONENTE GESTÃO DE PENDENTES (F12) ---
-
-const FiadoManagementView = ({ user, fiados, setFiados, cashSession, setCashSession, cashHistory }: any) => {
-  const [search, setSearch] = useState('');
-  const [receivingModal, setReceivingModal] = useState<FiadoRecord | null>(null);
-  const [receiveAmount, setReceiveAmount] = useState(0);
-  const [receiveMethod, setReceiveMethod] = useState('Dinheiro');
-
-  const pendingFiados = useMemo(() => {
-    return fiados.filter((f: FiadoRecord) => f.status === 'pending' && 
-      (f.clientName.toLowerCase().includes(search.toLowerCase()) || f.description.toLowerCase().includes(search.toLowerCase())));
-  }, [fiados, search]);
-
-  const handleReceive = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!receivingModal) return;
-
-    if (receiveAmount <= 0 || receiveAmount > receivingModal.remainingAmount + 0.01) {
-      alert('Valor inválido para recebimento.');
-      return;
-    }
-
-    const newRemaining = Math.max(0, receivingModal.remainingAmount - receiveAmount);
-    const isFullyPaid = newRemaining <= 0.01;
-
-    const updatedFiados = fiados.map((f: FiadoRecord) => {
-       if (f.id === receivingModal.id) {
-          return {
-            ...f,
-            remainingAmount: newRemaining,
-            status: isFullyPaid ? 'paid' : 'pending'
-          };
-       }
-       return f;
-    });
-
-    setFiados(updatedFiados);
-
-    if (cashSession && (receiveMethod === 'Dinheiro' || receiveMethod === 'Pix')) {
-       const newLog: CashLog = {
-          id: Math.random().toString(36).substr(2, 9),
-          type: 'entrada',
-          amount: receiveAmount,
-          description: `Rec. Pendente: ${receivingModal.clientName} (${receiveMethod})`,
-          time: new Date().toISOString(),
-          user: user.name
-       };
-
-       setCashSession((prev: CashSession) => ({
-          ...prev,
-          currentBalance: prev.currentBalance + (receiveMethod === 'Dinheiro' ? receiveAmount : 0),
-          logs: [newLog, ...prev.logs]
-       }));
-    }
-
-    alert(isFullyPaid ? 'Dívida quitada com sucesso!' : 'Pagamento parcial registrado!');
-    setReceivingModal(null);
-    setReceiveAmount(0);
-  };
-
-  return (
-    <div className="space-y-6 h-full flex flex-col min-h-0 animate-in fade-in">
-       <div>
-          <h2 className="text-2xl font-black text-zinc-900 tracking-tighter uppercase italic">Gestão de Pendentes (F12)</h2>
-          <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Controle de pagamentos pendentes de clientes</p>
-       </div>
-
-       <div className="bg-white p-4 rounded-2xl border border-zinc-200 shadow-sm flex gap-4 shrink-0">
-          <div className="relative group flex-1">
-            <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
-            <input 
-              type="text" 
-              placeholder="Buscar por cliente ou descrição..." 
-              className="w-full pl-11 pr-4 py-2.5 bg-zinc-50 border rounded-xl text-xs font-bold outline-none focus:border-red-500" 
-              value={search} 
-              onChange={(e) => setSearch(e.target.value)} 
-            />
-          </div>
-       </div>
-
-       <div className="bg-white rounded-2xl shadow-sm overflow-hidden border border-zinc-200 flex-1 flex flex-col min-h-0">
-          <div className="overflow-auto flex-1 custom-scroll">
-            <table className="w-full text-left border-separate border-spacing-0">
-              <thead className="bg-zinc-50 sticky top-0 z-10 text-[9px] font-black text-zinc-400 uppercase tracking-widest border-b">
-                <tr>
-                  <th className="px-6 py-4">Cliente</th>
-                  <th className="px-6 py-4">Acordo / Descrição</th>
-                  <th className="px-6 py-4">Vencimento</th>
-                  <th className="px-6 py-4 text-right">Valor Inicial</th>
-                  <th className="px-6 py-4 text-right">Pendente</th>
-                  <th className="px-6 py-4 text-right">Ação</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100">
-                {pendingFiados.map((f: FiadoRecord) => (
-                  <tr key={f.id} className="hover:bg-zinc-50 transition-all">
-                    <td className="px-6 py-4">
-                       <div className="flex flex-col">
-                          <span className="font-bold text-zinc-800 text-sm uppercase">{f.clientName}</span>
-                          <span className="text-[9px] font-black text-red-500">VENDA #{f.id.toString().slice(-4)}</span>
-                       </div>
-                    </td>
-                    <td className="px-6 py-4">
-                       <p className="text-xs font-bold text-zinc-500 italic max-w-xs">{f.description}</p>
-                    </td>
-                    <td className="px-6 py-4">
-                       <span className={`px-2 py-1 rounded text-[10px] font-black border ${new Date(f.dueDate) < new Date() ? 'bg-red-50 text-red-600 border-red-100 animate-pulse' : 'bg-zinc-100 text-zinc-500'}`}>
-                          {new Date(f.dueDate).toLocaleDateString()}
-                       </span>
-                    </td>
-                    <td className="px-6 py-4 text-right font-mono font-bold text-zinc-400 text-sm">R$ {formatCurrency(f.totalAmount)}</td>
-                    <td className="px-6 py-4 text-right">
-                       <span className="font-black text-red-600 font-mono text-sm">R$ {formatCurrency(f.remainingAmount)}</span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                       <button 
-                        onClick={() => { setReceivingModal(f); setReceiveAmount(f.remainingAmount); }}
-                        className="bg-green-600 text-white px-4 py-2 rounded-lg font-black text-[10px] uppercase shadow-md hover:bg-green-700 active:scale-95 transition-all"
-                       >
-                          Dar Baixa
-                       </button>
-                    </td>
-                  </tr>
-                ))}
-                {pendingFiados.length === 0 && (
-                   <tr>
-                     <td colSpan={6} className="py-20 text-center text-zinc-300 font-bold italic uppercase tracking-widest">Nenhum registro pendente encontrado...</td>
-                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-       </div>
-
-       {receivingModal && (
-          <div className="fixed inset-0 flex items-center justify-center p-6 z-[200] animate-in fade-in">
-             <form onSubmit={handleReceive} className="bg-white p-8 rounded-[2.5rem] w-full max-w-sm shadow-2xl space-y-6">
-                <div className="flex justify-between items-center border-b pb-4">
-                   <h3 className="text-xl font-black text-zinc-900 uppercase italic">Baixa de Pagamento</h3>
-                   <button type="button" onClick={() => setReceivingModal(null)} className="text-zinc-300 hover:text-zinc-500"><X size={24}/></button>
-                </div>
-                
-                <div className="bg-red-50 p-4 rounded-2xl border border-red-100 text-center">
-                   <span className="text-[9px] font-black text-red-400 uppercase tracking-widest">Cliente</span>
-                   <p className="text-lg font-black text-red-700 uppercase">{receivingModal.clientName}</p>
-                   <div className="mt-2 flex justify-center gap-4">
-                      <div>
-                         <span className="text-[8px] font-black text-zinc-400 uppercase block">Total Devido</span>
-                         <span className="font-mono font-black text-red-600">R$ {formatCurrency(receivingModal.remainingAmount)}</span>
-                      </div>
-                   </div>
-                </div>
-
-                <div className="space-y-4">
-                   <div>
-                      <label className="text-[9px] font-black text-zinc-400 uppercase block mb-1">Valor do Pagamento</label>
-                      <div className="relative">
-                         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-black text-zinc-300">R$</span>
-                         <input 
-                           type="text" 
-                           className="w-full pl-12 pr-4 py-4 bg-zinc-50 border-2 rounded-2xl text-2xl font-black text-red-700 outline-none focus:border-red-500"
-                           value={formatCurrency(receiveAmount)}
-                           onChange={(e) => setReceiveAmount(parseCurrency(e.target.value))}
-                           onFocus={(e) => e.target.select()}
-                         />
-                      </div>
-                   </div>
-
-                   <div>
-                      <label className="text-[9px] font-black text-zinc-400 uppercase block mb-1">Meio de Recebimento</label>
-                      <select 
-                        className="w-full border-2 rounded-2xl px-4 py-3 text-sm font-black uppercase bg-zinc-50 outline-none"
-                        value={receiveMethod}
-                        onChange={(e) => setReceiveMethod(e.target.value)}
-                      >
-                         <option>Dinheiro</option>
-                         <option>Pix</option>
-                         <option>Cartão</option>
-                      </select>
-                   </div>
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                   <button type="button" onClick={() => setReceivingModal(null)} className="flex-1 py-4 text-zinc-400 font-black uppercase text-[10px]">Cancelar</button>
-                   <button type="submit" className="flex-[2] py-4 bg-green-600 text-white font-black rounded-2xl uppercase text-[10px] shadow-xl hover:bg-green-700">Confirmar Recebimento</button>
-                </div>
-             </form>
-          </div>
-       )}
-    </div>
-  );
-};
 
 // --- COMPONENTE BUSCA RÁPIDA DE PRODUTOS ---
 
@@ -1334,320 +1089,6 @@ const ProductSearchViewComponent = ({ products, categories }: { products: Produc
   );
 };
 // --- COMPONENTE CAMPANHAS ---
-
-const CampaignsViewComponent = ({ campaigns, setCampaigns, products }: { campaigns: Campaign[], setCampaigns: any, products: Product[] }) => {
-  const [modal, setModal] = useState(false);
-  const [prodSearch, setProdSearch] = useState('');
-  const [form, setForm] = useState<Partial<Campaign>>({
-    name: '', description: '', type: 'percentage', discountPercent: 0, pagueX: 0, leveY: 0, voucherCode: '', voucherValue: 0, voucherQuantity: 1, bundleQuantity: 1, bundlePrice: 0, fixedPriceValue: 0, startDate: '', endDate: '', active: true, productIds: []
-  });
-
-  const save = (e: React.FormEvent) => {
-    e.preventDefault();
-    const id = form.id || Date.now();
-    const c: Campaign = { 
-      ...form, 
-      id, 
-      createdAt: form.createdAt || new Date().toISOString() 
-    } as Campaign;
-
-    if (form.id) setCampaigns((prev: Campaign[]) => prev.map(x => x.id === id ? c : x));
-    else setCampaigns((prev: Campaign[]) => [...prev, c]);
-    
-    setModal(false);
-    setForm({ name: '', description: '', type: 'percentage', discountPercent: 0, pagueX: 0, leveY: 0, voucherCode: '', voucherValue: 0, voucherQuantity: 1, bundleQuantity: 1, bundlePrice: 0, fixedPriceValue: 0, startDate: '', endDate: '', active: true, productIds: [] });
-  };
-
-  const filteredProds = products.filter(p => p.active && (p.name.toLowerCase().includes(prodSearch.toLowerCase()) || p.sku.toLowerCase().includes(prodSearch.toLowerCase())));
-
-  const toggleProduct = (pid: number) => {
-    const current = form.productIds || [];
-    if (current.includes(pid)) {
-      setForm({ ...form, productIds: current.filter(id => id !== pid) });
-    } else {
-      setForm({ ...form, productIds: [...current, pid] });
-    }
-  };
-
-  return (
-    <div className="space-y-6 h-full flex flex-col min-h-0 animate-in fade-in">
-      <div className="flex justify-between items-center shrink-0">
-        <div>
-          <h2 className="text-2xl font-black text-zinc-900 tracking-tighter uppercase italic">Campanhas</h2>
-          <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Gestão de promoções e eventos</p>
-        </div>
-        <button onClick={() => { setForm({ name: '', description: '', type: 'percentage', discountPercent: 0, pagueX: 0, leveY: 0, voucherCode: '', voucherValue: 0, voucherQuantity: 1, bundleQuantity: 1, bundlePrice: 0, fixedPriceValue: 0, startDate: '', endDate: '', active: true, productIds: [] }); setModal(true); }} className="bg-red-600 text-white px-6 py-3 rounded-xl font-black flex items-center gap-2 shadow-lg active:scale-95 text-[10px] uppercase">
-          <Plus size={16} /> Nova Campanha
-        </button>
-      </div>
-
-      <div className="bg-white rounded-2xl shadow-sm overflow-hidden border border-zinc-200 flex-1 flex flex-col min-h-0">
-        <div className="overflow-auto flex-1 custom-scroll">
-          <table className="w-full text-left border-separate border-spacing-0">
-            <thead className="bg-zinc-50 sticky top-0 z-10 text-[9px] font-black text-zinc-400 uppercase tracking-widest border-b">
-              <tr>
-                <th className="px-6 py-4">Campanha</th>
-                <th className="px-6 py-4">Tipo/Regra</th>
-                <th className="px-6 py-4">Itens/Validade</th>
-                <th className="px-6 py-4">Período</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-100">
-              {campaigns.map((c: Campaign) => (
-                <tr key={c.id} className="hover:bg-zinc-50 transition-all group">
-                  <td className="px-6 py-4">
-                    <div className="flex flex-col">
-                      <span className="font-bold text-zinc-800 text-sm uppercase italic">{c.name}</span>
-                      <span className="text-[10px] text-zinc-400 truncate max-w-xs">{c.description}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                     {c.type === 'percentage' ? (
-                       <span className="bg-red-50 text-red-600 px-3 py-1 rounded-full text-[10px] font-black border border-red-100 uppercase">
-                          {c.discountPercent}% OFF
-                       </span>
-                     ) : c.type === 'buy_x_get_y' ? (
-                       <span className="bg-red-50 text-red-600 px-3 py-1 rounded-full text-[10px] font-black border border-red-100 uppercase flex items-center gap-1.5 w-fit">
-                          <TicketPercent size={12} /> PAGUE {c.pagueX} LEVE {c.leveY}
-                       </span>
-                     ) : c.type === 'bundle' ? (
-                        <div className="flex flex-col gap-1">
-                            <span className="bg-purple-50 text-purple-600 px-3 py-1 rounded-full text-[10px] font-black border border-purple-100 uppercase flex items-center gap-1.5 w-fit">
-                                <Package size={12} /> {c.bundleQuantity} POR R$ {formatCurrency(c.bundlePrice || 0)}
-                            </span>
-                        </div>
-                     ) : c.type === 'fixed_price' ? (
-                        <span className="bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full text-[10px] font-black border border-emerald-100 uppercase flex items-center gap-1.5 w-fit">
-                           <Tag size={12} /> PREÇO FIXO: R$ {formatCurrency(c.fixedPriceValue || 0)}
-                        </span>
-                     ) : (
-                        <div className="flex flex-col gap-1">
-                            <span className="bg-amber-50 text-amber-600 px-3 py-1 rounded-full text-[10px] font-black border border-amber-100 uppercase flex items-center gap-1.5 w-fit">
-                                <Gift size={12} /> VOUCHER: {c.voucherCode}
-                            </span>
-                            <span className="text-[10px] font-black text-zinc-500 font-mono">VALOR: R$ {formatCurrency(c.voucherValue || 0)}</span>
-                        </div>
-                     )}
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex flex-col gap-1">
-                        <span className="bg-zinc-100 text-zinc-500 px-2 py-0.5 rounded text-[10px] font-black w-fit uppercase">
-                            {c.productIds?.length || 0} PRODS
-                        </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2 text-[10px] font-bold text-zinc-500">
-                      <CalendarDays size={12} className="text-red-400" />
-                      {new Date(c.startDate).toLocaleDateString()} - {new Date(c.endDate).toLocaleDateString()}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    {(() => {
-                      const now = new Date();
-                      const start = new Date(c.startDate);
-                      const end = new Date(c.endDate);
-                      end.setHours(23, 59, 59, 999);
-                      
-                      if (now > end) return <span className="px-2.5 py-1 rounded-lg text-[8px] font-black uppercase border bg-red-50 text-red-600 border-red-100">Encerrada</span>;
-                      if (now < start) return <span className="px-2.5 py-1 rounded-lg text-[8px] font-black uppercase border bg-red-50 text-red-600 border-red-100">Agendada</span>;
-                      return <span className="px-2.5 py-1 rounded-lg text-[8px] font-black uppercase border bg-green-50 text-green-600 border-green-100">Ativa</span>;
-                    })()}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex justify-end gap-2">
-                      <button onClick={() => { setForm(c); setModal(true); }} className="p-2 text-zinc-400 hover:text-red-600"><Edit size={14} /></button>
-                      <button onClick={() => setCampaigns(campaigns.filter((x: any) => x.id !== c.id))} className="p-2 text-zinc-400 hover:text-red-600"><Trash2 size={14} /></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {campaigns.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="py-20 text-center text-zinc-300 font-bold italic">Nenhuma campanha cadastrada...</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {modal && (
-        <div className="fixed inset-0 flex items-center justify-center p-6 z-[100] animate-in fade-in">
-          <form onSubmit={save} className="bg-white p-8 rounded-[2.5rem] w-full max-w-3xl shadow-2xl space-y-6 max-h-[90vh] overflow-hidden flex flex-col relative z-20">
-            <div className="flex justify-between items-center border-b pb-4 shrink-0">
-               <h3 className="text-xl font-black text-zinc-900 uppercase italic">
-                  {form.id ? 'Ajustar' : 'Nova'} Campanha
-               </h3>
-               <button type="button" onClick={() => setModal(false)} className="text-zinc-300 hover:text-zinc-500 transition-colors"><X size={24}/></button>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto custom-scroll pr-2 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-black text-zinc-400 uppercase block ml-1">Nome da Campanha</label>
-                      <input className="w-full border-2 rounded-xl px-4 py-2.5 text-sm font-bold uppercase focus:border-red-500 outline-none" placeholder="Ex: Black Friday" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-black text-zinc-400 uppercase block ml-1">Descrição</label>
-                      <textarea className="w-full border-2 rounded-xl px-4 py-2.5 text-sm font-bold h-20 resize-none focus:border-red-500 outline-none" placeholder="Detalhes da promoção..." value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
-                    </div>
-                    <div className="space-y-1">
-                        <label className="text-[9px] font-black text-zinc-400 uppercase block ml-1">Tipo de Campanha</label>
-                        <select className="w-full border-2 rounded-xl px-4 py-2.5 text-sm font-bold uppercase focus:border-red-500 outline-none" value={form.type} onChange={e => setForm({ ...form, type: e.target.value as any })}>
-                           <option value="percentage">Desconto Percentual (%)</option>
-                           <option value="fixed_price">Preço Fixo (R$)</option>
-                           <option value="buy_x_get_y">Pague X, Leve Y (Item Grátis)</option>
-                           <option value="bundle">Combo / Bundle (Ex: 3 por 100)</option>
-                        </select>
-                    </div>
-
-                    {form.type === 'percentage' && (
-                       <div className="space-y-1">
-                          <label className="text-[9px] font-black text-zinc-400 uppercase block ml-1">Desconto (%)</label>
-                          <div className="relative">
-                            <Percent size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-300" />
-                            <input 
-                              type="number" 
-                              step="0.5" 
-                              className="w-full border-2 rounded-xl px-4 py-2.5 text-sm font-black text-red-600 focus:border-red-300 outline-none" 
-                              value={form.discountPercent} 
-                              onFocus={() => { if(form.discountPercent === 0) setForm(prev => ({...prev, discountPercent: '' as any})); }} 
-                              onBlur={() => { if(form.discountPercent as any === '') setForm(prev => ({...prev, discountPercent: 0})); }}
-                              onChange={e => setForm(prev => ({ ...prev, discountPercent: e.target.value === '' ? '' as any : Number(e.target.value) }))} 
-                              required 
-                            />
-                          </div>
-                       </div>
-                    )}
-
-                    {form.type === 'fixed_price' && (
-                       <div className="space-y-1">
-                          <label className="text-[9px] font-black text-zinc-400 uppercase block ml-1">Preço Final (R$)</label>
-                          <div className="relative">
-                            <DollarSign size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-300" />
-                            <input 
-                              type="text" 
-                              className="w-full border-2 rounded-xl pl-12 pr-4 py-2.5 text-sm font-black text-emerald-600 focus:border-emerald-300 outline-none bg-zinc-50" 
-                              value={formatCurrency(form.fixedPriceValue || 0)} 
-                              onFocus={(e) => e.target.select()}
-                              onChange={e => setForm(prev => ({ ...prev, fixedPriceValue: parseCurrency(e.target.value) }))} 
-                              required 
-                            />
-                          </div>
-                          <p className="text-[8px] font-bold text-zinc-400 uppercase mt-1 italic">Todos os itens selecionados custarão este valor no caixa.</p>
-                       </div>
-                    )}
-
-                    {form.type === 'buy_x_get_y' && (
-                       <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-1">
-                            <label className="text-[9px] font-black text-zinc-400 uppercase block mb-1">Pague (Qtd)</label>
-                            <input 
-                              type="number" 
-                              className="w-full border-2 rounded-xl px-4 py-2.5 text-sm font-black text-red-600 focus:border-red-300 outline-none bg-zinc-50" 
-                              value={form.pagueX} 
-                              onFocus={(e) => e.target.select()}
-                              onChange={e => setForm(prev => ({ ...prev, pagueX: Number(e.target.value) }))} 
-                              required 
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-[9px] font-black text-zinc-400 uppercase block mb-1">Leve (Qtd)</label>
-                            <input 
-                              type="number" 
-                              className="w-full border-2 rounded-xl px-4 py-2.5 text-sm font-black text-green-600 focus:border-green-300 outline-none bg-zinc-50" 
-                              value={form.leveY} 
-                              onFocus={(e) => e.target.select()}
-                              onChange={e => setForm(prev => ({ ...prev, leveY: Number(e.target.value) }))} 
-                              required 
-                            />
-                          </div>
-                          <p className="col-span-2 text-[8px] font-bold text-zinc-400 italic uppercase">
-                             O sistema dará desconto de 100% nas {(form.leveY || 0) - (form.pagueX || 0)} unidades mais baratas a cada {form.leveY} itens.
-                          </p>
-                       </div>
-                    )}
-
-                    {form.type === 'bundle' && (
-                       <div className="grid grid-cols-2 gap-4 bg-purple-50 p-4 rounded-2xl border border-purple-100">
-                          <div className="space-y-1">
-                            <label className="text-[9px] font-black text-purple-600 uppercase block ml-1">Qtd Itens</label>
-                            <input 
-                              type="number" 
-                              min="1"
-                              className="w-full border-2 rounded-xl px-4 py-2.5 text-sm font-black text-purple-700 focus:border-purple-300 outline-none" 
-                              value={form.bundleQuantity} 
-                              onChange={e => setForm(prev => ({ ...prev, bundleQuantity: Number(e.target.value) }))} 
-                              required 
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-[9px] font-black text-purple-600 uppercase block ml-1">Preço do Combo (R$)</label>
-                            <input 
-                              type="text" 
-                              className="w-full border-2 rounded-xl px-4 py-2.5 text-sm font-black text-purple-700 focus:border-purple-300 outline-none" 
-                              value={formatCurrency(form.bundlePrice || 0)} 
-                              onChange={e => setForm(prev => ({ ...prev, bundlePrice: parseCurrency(e.target.value) }))} 
-                              required 
-                            />
-                          </div>
-                       </div>
-                    )}
-
-
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                          <label className="text-[9px] font-black text-zinc-400 uppercase block ml-1">Início</label>
-                          <input type="date" className="w-full border-2 rounded-xl px-4 py-2.5 text-sm font-bold focus:border-red-500 outline-none" value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} required />
-                      </div>
-                      <div className="space-y-1">
-                          <label className="text-[9px] font-black text-zinc-400 uppercase block ml-1">Término</label>
-                          <input type="date" className="w-full border-2 rounded-xl px-4 py-2.5 text-sm font-bold focus:border-red-500 outline-none" value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })} required />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4 flex flex-col min-h-0">
-                    <label className="text-[9px] font-black text-zinc-400 uppercase block ml-1">Selecionar Produtos Participantes</label>
-                    <div className="relative">
-                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-                      <input type="text" placeholder="Buscar produto por nome ou SKU..." className="w-full border-2 rounded-xl pl-9 pr-4 py-2 text-xs font-bold bg-zinc-50 outline-none focus:border-red-500" value={prodSearch} onChange={e => setProdSearch(e.target.value)} />
-                    </div>
-                    <div className="flex-1 border-2 rounded-2xl overflow-y-auto custom-scroll bg-zinc-50 p-2 space-y-1 max-h-[300px]">
-                        {filteredProds.map(p => (
-                          <div key={p.id} onClick={() => toggleProduct(p.id)} className={`flex items-center justify-between p-2 rounded-xl cursor-pointer transition-all ${form.productIds?.includes(p.id) ? 'bg-red-600 text-white shadow-md' : 'bg-white hover:bg-red-50 text-zinc-700'}`}>
-                             <div className="flex flex-col min-w-0">
-                                <span className="text-[10px] font-black uppercase truncate">{p.name}</span>
-                                <span className={`text-[8px] font-mono ${form.productIds?.includes(p.id) ? 'text-red-200' : 'text-zinc-400'}`}>SKU: {p.sku}</span>
-                             </div>
-                             {form.productIds?.includes(p.id) ? <CheckCircle2 size={14} /> : <Plus size={14} className="text-zinc-300" />}
-                          </div>
-                        ))}
-                        {filteredProds.length === 0 && <p className="text-center py-4 text-[10px] text-zinc-400 font-bold uppercase italic">Nenhum produto encontrado...</p>}
-                    </div>
-                    <div className="bg-red-50 p-3 rounded-xl border border-red-100 flex justify-between items-center">
-                       <span className="text-[9px] font-black text-red-400 uppercase tracking-widest">Selecionados</span>
-                       <span className="text-xs font-black text-red-600">{form.productIds?.length || 0} Peças</span>
-                    </div>
-                  </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3 pt-6 border-t mt-4 shrink-0">
-              <button type="button" onClick={() => setModal(false)} className="px-5 py-2 text-zinc-400 font-black uppercase text-[10px]">DESCARTAR</button>
-              <button type="submit" className="bg-red-600 text-white px-10 py-3 rounded-xl font-black uppercase text-[10px] shadow-xl hover:bg-red-700 active:scale-95">SALVAR CAMPANHA</button>
-            </div>
-          </form>
-        </div>
-      )}
-    </div>
-  );
-};
 
 const maskCPFCNPJ = (value: string) => {
   const v = value.replace(/\D/g, '');
@@ -2120,7 +1561,7 @@ const CustomerManagementView = ({ customers, setCustomers, sales, settings }: an
   );
 };
 
-const SalesViewComponent = ({ user, products, setProducts, setSales, setMovements, vendedores, cashSession, setCashSession, settings, exchangeCredit, setExchangeCredit, campaigns, setCampaigns, fiados, setFiados, customers, setCustomers, setCurrentView }: any) => {
+const SalesViewComponent = ({ user, products, setProducts, setSales, setMovements, vendedores, cashSession, setCashSession, settings, exchangeCredit, setExchangeCredit, customers, setCustomers, setCurrentView }: any) => {
   const isMasterUser = user.id === 0 || user.email === 'master@internal';
   const isAdmin = user.role === 'admin' || isMasterUser;
   
@@ -2173,16 +1614,6 @@ const SalesViewComponent = ({ user, products, setProducts, setSales, setMovement
     });
   }, [products, search, isExact]);
 
-  const getQualifyingCampaign = useCallback((productId: number) => {
-    const now = new Date();
-    return (campaigns || []).find((c: Campaign) => {
-      const start = new Date(c.startDate);
-      const end = new Date(c.endDate);
-      end.setHours(23, 59, 59, 999);
-      return now >= start && now <= end && c.productIds?.includes(productId);
-    });
-  }, [campaigns]);
-
   const handleCopyDeliveryFromReceipt = () => {
     if (!receiptData || !receiptData.customerId) {
         alert('Nenhum cliente selecionado para esta venda.');
@@ -2197,124 +1628,6 @@ const SalesViewComponent = ({ user, products, setProducts, setSales, setMovement
     navigator.clipboard.writeText(text);
     alert('Dados de entrega copiados!');
   };
-
-  const applyAutomaticCampaigns = useCallback((currentCart: SaleItem[]) => {
-    let newCart = [...currentCart];
-    
-    newCart = newCart.map(item => ({ 
-      ...item, 
-      discountValue: 0, 
-      campaignName: undefined, 
-      campaignType: undefined 
-    }));
-
-    const activeXYCampaigns = (campaigns || []).filter((c: Campaign) => {
-      const now = new Date();
-      const start = new Date(c.startDate);
-      const end = new Date(c.endDate);
-      end.setHours(23, 59, 59, 999);
-      return c.type === 'buy_x_get_y' && now >= start && now <= end;
-    });
-
-    activeXYCampaigns.forEach((camp: Campaign) => {
-      const qualifyingItems = newCart.filter(item => camp.productIds.includes(item.productId));
-      const totalUnits = qualifyingItems.reduce((acc, item) => acc + item.quantity, 0);
-      
-      const leveY = camp.leveY || 1;
-      const pagueX = camp.pagueX || 0;
-      
-      if (totalUnits >= leveY) {
-        const freePerBundle = leveY - pagueX;
-        const freeUnitsTotal = Math.floor(totalUnits / leveY) * freePerBundle;
-        
-        let allUnits: { cartId: string, price: number }[] = [];
-        qualifyingItems.forEach(item => {
-          for(let k = 0; k < item.quantity; k++) {
-            allUnits.push({ cartId: item.cartId, price: item.price });
-          }
-        });
-
-        allUnits.sort((a, b) => a.price - b.price);
-        
-        const unitsToDiscount = allUnits.slice(0, freeUnitsTotal);
-        
-        unitsToDiscount.forEach(unit => {
-          const cartIdx = newCart.findIndex(it => it.cartId === unit.cartId);
-          if (cartIdx !== -1) {
-            newCart[cartIdx].discountValue += unit.price;
-            newCart[cartIdx].campaignName = camp.name;
-            newCart[cartIdx].campaignType = 'buy_x_get_y';
-          }
-        });
-      }
-    });
-
-    const activeBundleCampaigns = (campaigns || []).filter((c: Campaign) => {
-      const now = new Date();
-      const start = new Date(c.startDate);
-      const end = new Date(c.endDate);
-      end.setHours(23, 59, 59, 999);
-      return c.type === 'bundle' && now >= start && now <= end;
-    });
-
-    activeBundleCampaigns.forEach((camp: Campaign) => {
-      const qualifyingItems = newCart.filter(item => camp.productIds.includes(item.productId));
-      const totalQty = qualifyingItems.reduce((acc, item) => acc + item.quantity, 0);
-      const bundleQty = camp.bundleQuantity || 1;
-
-      if (totalQty >= bundleQty) {
-        const setsCount = Math.floor(totalQty / bundleQty);
-        const targetPricePerSet = camp.bundlePrice || 0;
-        
-        let allUnits: { cartId: string, price: number }[] = [];
-        qualifyingItems.forEach(item => {
-          for(let k = 0; k < item.quantity; k++) {
-            allUnits.push({ cartId: item.cartId, price: item.price });
-          }
-        });
-
-        allUnits.sort((a, b) => b.price - a.price);
-
-        const unitsInBundles = allUnits.slice(0, setsCount * bundleQty);
-        const originalBundlesTotal = unitsInBundles.reduce((acc, u) => acc + u.price, 0);
-        const targetBundlesTotal = setsCount * targetPricePerSet;
-        const totalDiscountToApply = Math.max(0, originalBundlesTotal - targetBundlesTotal);
-
-        unitsInBundles.forEach(unit => {
-          const cartIdx = newCart.findIndex(it => it.cartId === unit.cartId);
-          if (cartIdx !== -1) {
-            const proportionalDiscount = totalDiscountToApply / unitsInBundles.length;
-            newCart[cartIdx].discountValue += proportionalDiscount;
-            newCart[cartIdx].campaignName = camp.name;
-            newCart[cartIdx].campaignType = 'bundle';
-          }
-        });
-      }
-    });
-
-    newCart = newCart.map(item => {
-      if (item.campaignType) return item; 
-      const camp = getQualifyingCampaign(item.productId);
-      if (camp && camp.type === 'fixed_price') {
-        const fixedVal = camp.fixedPriceValue || 0;
-        const disc = Math.max(0, (item.price - fixedVal) * item.quantity);
-        return { ...item, discountValue: disc, campaignName: camp.name, campaignType: 'fixed_price' };
-      }
-      return item;
-    });
-
-    newCart = newCart.map(item => {
-      if (item.campaignType) return item; 
-      const camp = getQualifyingCampaign(item.productId);
-      if (camp && camp.type === 'percentage') {
-        const disc = (item.price * item.quantity) * (camp.discountPercent / 100);
-        return { ...item, discountValue: disc, campaignName: camp.name, campaignType: 'percentage' };
-      }
-      return item;
-    });
-
-    return newCart;
-  }, [campaigns, getQualifyingCampaign]);
 
   const addDirectly = useCallback((p: Product) => {
     const totalInCart = cart.filter(item => item.productId === p.id).reduce((acc, item) => acc + item.quantity, 0);
@@ -2337,12 +1650,11 @@ const SalesViewComponent = ({ user, products, setProducts, setSales, setMovement
       manualDiscountType: 'value'
     };
 
-    const updatedCart = applyAutomaticCampaigns([...cart, newItem]);
-    setCart(updatedCart);
+    setCart([...cart, newItem]);
     setSelectedId(''); 
     setSearch(''); 
     setTimeout(() => searchInputRef.current?.focus(), 10);
-  }, [cart, applyAutomaticCampaigns]);
+  }, [cart]);
 
   const updateQuantity = (cartId: string, delta: number) => {
     const item = cart.find(i => i.cartId === cartId);
@@ -2353,8 +1665,7 @@ const SalesViewComponent = ({ user, products, setProducts, setSales, setMovement
 
     const newQty = item.quantity + delta;
     if (newQty <= 0) {
-      const updated = applyAutomaticCampaigns(cart.filter(i => i.cartId !== cartId));
-      setCart(updated);
+      setCart(cart.filter(i => i.cartId !== cartId));
       return;
     }
 
@@ -2364,11 +1675,11 @@ const SalesViewComponent = ({ user, products, setProducts, setSales, setMovement
     }
 
     const updatedItems = cart.map(i => i.cartId === cartId ? { ...i, quantity: newQty } : i);
-    setCart(applyAutomaticCampaigns(updatedItems));
+    setCart(updatedItems);
   };
 
   const removeFromCart = (cartId: string) => {
-    setCart(applyAutomaticCampaigns(cart.filter(i => i.cartId !== cartId)));
+    setCart(cart.filter(i => i.cartId !== cartId));
   };
 
   useEffect(() => {
@@ -3559,7 +2870,7 @@ const StockManagementView = ({ user, products, setProducts, categories, setCateg
 
 // --- COMPONENTE DASHBOARD ---
 
-const DashboardViewComponent = ({ products, sales, cashSession, fiados, cashHistory }: any) => {
+const DashboardViewComponent = ({ products, sales, cashSession, cashHistory }: any) => {
   const [period, setPeriod] = useState<'day' | 'month' | 'year'>('day');
   const [selectedDay, setSelectedDay] = useState(new Date().toISOString().slice(0, 10));
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
@@ -3694,7 +3005,6 @@ const DashboardViewComponent = ({ products, sales, cashSession, fiados, cashHist
   const totalStock = products.reduce((acc: number, p: any) => acc + p.stock, 0);
   const totalStockCost = products.reduce((acc: number, p: any) => acc + (p.cost * p.stock), 0);
   const totalStockSaleValue = products.reduce((acc: number, p: any) => acc + (p.price * p.stock), 0);
-  const totalFiadoPending = fiados.filter((f: FiadoRecord) => f.status === 'pending').reduce((acc: number, f: FiadoRecord) => acc + f.remainingAmount, 0);
   
   const totalReceivedForBadges = stats.totals.cash + stats.totals.pix + stats.totals.card;
 
