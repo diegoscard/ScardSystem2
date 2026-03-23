@@ -888,8 +888,6 @@ const NavBtn = ({ active, onClick, icon, label }: any) => (
   </button>
 );
 
-// --- COMPONENTE GESTÃO DE PENDENTES (F12) ---
-
 // --- COMPONENTE BUSCA RÁPIDA DE PRODUTOS ---
 
 const ProductSearchViewComponent = ({ products, categories }: { products: Product[], categories: string[] }) => {
@@ -897,6 +895,7 @@ const ProductSearchViewComponent = ({ products, categories }: { products: Produc
   const [isExact, setIsExact] = useState(false);
   const [filterCategory, setFilterCategory] = useState('Todas');
   const [filterSize, setFilterSize] = useState('');
+  const [filterQuantity, setFilterQuantity] = useState('');
   const [summaryModal, setSummaryModal] = useState(false);
   const [summaryText, setSummaryText] = useState('');
 
@@ -911,6 +910,7 @@ const ProductSearchViewComponent = ({ products, categories }: { products: Produc
   const filteredProducts = useMemo(() => {
     const t = search.toLowerCase();
     const s = filterSize.toLowerCase();
+    const q = filterQuantity.trim();
     return products.filter((p: Product) => {
       let matchSearch = false;
       if (!t) {
@@ -925,9 +925,10 @@ const ProductSearchViewComponent = ({ products, categories }: { products: Produc
 
       const matchCategory = filterCategory === 'Todas' ? true : p.category === filterCategory;
       const matchSize = s ? p.size?.toLowerCase().includes(s) : true;
-      return matchSearch && matchCategory && matchSize;
+      const matchQuantity = q ? p.stock.toString() === q : true;
+      return matchSearch && matchCategory && matchSize && matchQuantity;
     });
-  }, [products, search, isExact, filterCategory, filterSize]);
+  }, [products, search, isExact, filterCategory, filterSize, filterQuantity]);
 
   const generateWppSummary = () => {
     if (filteredProducts.length === 0) {
@@ -974,7 +975,7 @@ const ProductSearchViewComponent = ({ products, categories }: { products: Produc
        
        <div className="bg-white p-6 rounded-2xl border border-zinc-200 shadow-sm space-y-4 shrink-0">
           <div className="flex gap-4">
-            <div className="relative group flex-[3]">
+            <div className="relative group flex-[2]">
               <Search size={18} className={`absolute left-4 top-1/2 -translate-y-1/2 ${isExact ? 'text-red-500' : 'text-zinc-400'}`} />
               <input 
                 type="text" 
@@ -985,29 +986,33 @@ const ProductSearchViewComponent = ({ products, categories }: { products: Produc
                 autoFocus 
               />
             </div>
+            <input 
+              type="text" 
+              placeholder="Qualidade..." 
+              className="flex-1 px-4 py-2.5 bg-zinc-50 border rounded-xl text-xs font-bold outline-none focus:border-red-500 uppercase"
+              value={filterSize}
+              onChange={e => setFilterSize(e.target.value)}
+            />
+            <input 
+              type="number" 
+              placeholder="Quantidade..." 
+              className="flex-1 px-4 py-2.5 bg-zinc-50 border rounded-xl text-xs font-bold outline-none focus:border-red-500"
+              value={filterQuantity}
+              onChange={e => setFilterQuantity(e.target.value)}
+            />
             <select className="flex-1 bg-zinc-50 px-4 py-2.5 rounded-xl border text-[10px] font-black uppercase outline-none focus:border-red-500" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
                <option value="Todas">Todas Categorias</option>
                {sortedCategories.map((cat: string) => <option key={cat} value={cat}>{cat}</option>)}
             </select>
           </div>
           
-          <div className="flex gap-6 items-center border-t pt-4">
-            <div className="flex items-center gap-3">
-              <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">QUALIDADE</label>
-              <input 
-                type="text" 
-                placeholder="" 
-                className="w-32 px-3 py-2 bg-zinc-50 border rounded-lg text-xs font-bold outline-none focus:border-red-500 uppercase"
-                value={filterSize}
-                onChange={e => setFilterSize(e.target.value)}
-              />
-            </div>
-            {filterSize && (
-              <button onClick={() => { setFilterSize(''); }} className="text-[9px] font-black text-red-400 uppercase hover:text-red-600 transition-colors flex items-center gap-1">
+          {(filterSize || filterQuantity || filterCategory !== 'Todas' || search) && (
+            <div className="flex justify-end border-t pt-4">
+              <button onClick={() => { setFilterSize(''); setFilterQuantity(''); setFilterCategory('Todas'); setSearch(''); }} className="text-[9px] font-black text-red-400 uppercase hover:text-red-600 transition-colors flex items-center gap-1">
                 <X size={12} /> Limpar Filtros
               </button>
-            )}
-          </div>
+            </div>
+          )}
        </div>
 
        <div className="bg-white rounded-2xl shadow-sm overflow-hidden border border-zinc-200 flex-1 flex flex-col min-h-0">
@@ -1088,7 +1093,6 @@ const ProductSearchViewComponent = ({ products, categories }: { products: Produc
     </div>
   );
 };
-// --- COMPONENTE CAMPANHAS ---
 
 const maskCPFCNPJ = (value: string) => {
   const v = value.replace(/\D/g, '');
@@ -2487,6 +2491,7 @@ const StockManagementView = ({ user, products, setProducts, categories, setCateg
   const [isExact, setIsExact] = useState(false);
   const [filterCategory, setFilterCategory] = useState('Todas');
   const [filterSize, setFilterSize] = useState('');
+  const [filterQuantity, setFilterQuantity] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const isMaster = user?.id === 0 || user?.email === 'master@internal';
@@ -2613,6 +2618,7 @@ const StockManagementView = ({ user, products, setProducts, categories, setCateg
   const filteredProducts = useMemo(() => {
     const t = search.toLowerCase();
     const s = filterSize.toLowerCase();
+    const q = filterQuantity.trim();
     return products.filter((p: Product) => {
       let matchSearch = false;
       if (!t) {
@@ -2627,9 +2633,10 @@ const StockManagementView = ({ user, products, setProducts, categories, setCateg
 
       const matchCategory = filterCategory === 'Todas' ? true : p.category === filterCategory;
       const matchSize = s ? p.size?.toLowerCase().includes(s) : true;
-      return matchSearch && matchCategory && matchSize;
+      const matchQuantity = q ? p.stock.toString() === q : true;
+      return matchSearch && matchCategory && matchSize && matchQuantity;
     });
-  }, [products, search, isExact, filterCategory, filterSize]);
+  }, [products, search, isExact, filterCategory, filterSize, filterQuantity]);
 
   const generateWppSummary = () => {
     if (filteredProducts.length === 0) {
@@ -2688,7 +2695,7 @@ const StockManagementView = ({ user, products, setProducts, categories, setCateg
       )}
       <div className="bg-white p-6 rounded-2xl border border-zinc-200 shadow-sm space-y-4 shrink-0">
         <div className="flex gap-4">
-          <div className="relative group flex-[3]">
+          <div className="relative group flex-[2]">
             <Search size={18} className={`absolute left-4 top-1/2 -translate-y-1/2 ${isExact ? 'text-red-500' : 'text-zinc-400'}`} />
             <input 
               type="text" 
@@ -2698,29 +2705,33 @@ const StockManagementView = ({ user, products, setProducts, categories, setCateg
               onChange={(e) => setSearch(e.target.value)} 
             />
           </div>
+          <input 
+            type="text" 
+            placeholder="Qualidade..." 
+            className="flex-1 px-4 py-2.5 bg-zinc-50 border rounded-xl text-xs font-bold outline-none focus:border-red-500 uppercase"
+            value={filterSize}
+            onChange={e => setFilterSize(e.target.value)}
+          />
+          <input 
+            type="number" 
+            placeholder="Quantidade..." 
+            className="flex-1 px-4 py-2.5 bg-zinc-50 border rounded-xl text-xs font-bold outline-none focus:border-red-500"
+            value={filterQuantity}
+            onChange={e => setFilterQuantity(e.target.value)}
+          />
           <select className="flex-1 bg-zinc-50 px-4 py-2.5 rounded-xl border text-[10px] font-black uppercase outline-none focus:border-red-500" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
                <option value="Todas">Todas Categorias</option>
                {sortedCategories.map((cat: string) => <option key={cat} value={cat}>{cat}</option>)}
           </select>
         </div>
 
-        <div className="flex gap-6 items-center border-t pt-4">
-          <div className="flex items-center gap-3">
-            <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">QUALIDADE</label>
-            <input 
-              type="text" 
-              placeholder="" 
-              className="w-32 px-3 py-2 bg-zinc-50 border rounded-lg text-xs font-bold outline-none focus:border-red-500 uppercase"
-              value={filterSize}
-              onChange={e => setFilterSize(e.target.value)}
-            />
-          </div>
-          {filterSize && (
-            <button onClick={() => { setFilterSize(''); }} className="text-[9px] font-black text-red-400 uppercase hover:text-red-600 transition-colors flex items-center gap-1">
+        {(filterSize || filterQuantity || filterCategory !== 'Todas' || search) && (
+          <div className="flex justify-end border-t pt-4">
+            <button onClick={() => { setFilterSize(''); setFilterQuantity(''); setFilterCategory('Todas'); setSearch(''); }} className="text-[9px] font-black text-red-400 uppercase hover:text-red-600 transition-colors flex items-center gap-1">
               <X size={12} /> Limpar Filtros
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm overflow-hidden border border-zinc-200 flex-1 flex flex-col min-h-0">
