@@ -973,8 +973,8 @@ const ProductSearchViewComponent = ({ products, categories }: { products: Produc
           </div>
        </div>
        
-       <div className="bg-white p-6 rounded-2xl border border-zinc-200 shadow-sm space-y-4 shrink-0">
-          <div className="flex gap-4">
+       <div className="bg-white p-6 rounded-2xl border border-zinc-200 shadow-sm shrink-0">
+          <div className="flex gap-4 items-center">
             <div className="relative group flex-[2]">
               <Search size={18} className={`absolute left-4 top-1/2 -translate-y-1/2 ${isExact ? 'text-red-500' : 'text-zinc-400'}`} />
               <input 
@@ -1004,15 +1004,12 @@ const ProductSearchViewComponent = ({ products, categories }: { products: Produc
                <option value="Todas">Todas Categorias</option>
                {sortedCategories.map((cat: string) => <option key={cat} value={cat}>{cat}</option>)}
             </select>
-          </div>
-          
-          {(filterSize || filterQuantity || filterCategory !== 'Todas' || search) && (
-            <div className="flex justify-end border-t pt-4">
-              <button onClick={() => { setFilterSize(''); setFilterQuantity(''); setFilterCategory('Todas'); setSearch(''); }} className="text-[9px] font-black text-red-400 uppercase hover:text-red-600 transition-colors flex items-center gap-1">
-                <X size={12} /> Limpar Filtros
+            {(filterSize || filterQuantity || filterCategory !== 'Todas' || search) && (
+              <button onClick={() => { setFilterSize(''); setFilterQuantity(''); setFilterCategory('Todas'); setSearch(''); }} className="p-2.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors flex-shrink-0" title="Limpar Filtros">
+                <X size={18} />
               </button>
-            </div>
-          )}
+            )}
+          </div>
        </div>
 
        <div className="bg-white rounded-2xl shadow-sm overflow-hidden border border-zinc-200 flex-1 flex flex-col min-h-0">
@@ -2693,8 +2690,8 @@ const StockManagementView = ({ user, products, setProducts, categories, setCateg
             </div>
         </div>
       )}
-      <div className="bg-white p-6 rounded-2xl border border-zinc-200 shadow-sm space-y-4 shrink-0">
-        <div className="flex gap-4">
+      <div className="bg-white p-6 rounded-2xl border border-zinc-200 shadow-sm shrink-0">
+        <div className="flex gap-4 items-center">
           <div className="relative group flex-[2]">
             <Search size={18} className={`absolute left-4 top-1/2 -translate-y-1/2 ${isExact ? 'text-red-500' : 'text-zinc-400'}`} />
             <input 
@@ -2723,15 +2720,12 @@ const StockManagementView = ({ user, products, setProducts, categories, setCateg
                <option value="Todas">Todas Categorias</option>
                {sortedCategories.map((cat: string) => <option key={cat} value={cat}>{cat}</option>)}
           </select>
-        </div>
-
-        {(filterSize || filterQuantity || filterCategory !== 'Todas' || search) && (
-          <div className="flex justify-end border-t pt-4">
-            <button onClick={() => { setFilterSize(''); setFilterQuantity(''); setFilterCategory('Todas'); setSearch(''); }} className="text-[9px] font-black text-red-400 uppercase hover:text-red-600 transition-colors flex items-center gap-1">
-              <X size={12} /> Limpar Filtros
+          {(filterSize || filterQuantity || filterCategory !== 'Todas' || search) && (
+            <button onClick={() => { setFilterSize(''); setFilterQuantity(''); setFilterCategory('Todas'); setSearch(''); }} className="p-2.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors flex-shrink-0" title="Limpar Filtros">
+              <X size={18} />
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm overflow-hidden border border-zinc-200 flex-1 flex flex-col min-h-0">
