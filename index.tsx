@@ -1159,9 +1159,12 @@ const CustomerManagementView = ({ customers, setCustomers, sales, settings }: an
 
   const handleCopyDelivery = (c: Customer) => {
     const addressWithNumber = c.addressNumber ? `${c.address}, Nº ${c.addressNumber}` : c.address;
-    const text = `👤 *CLIENTE:* ${c.name}\n📍 *ENDEREÇO:* ${addressWithNumber || 'Não informado'}`;
+    const emojiUser = String.fromCodePoint(0x1F464);
+    const emojiPin = String.fromCodePoint(0x1F4CD);
+    const text = `${emojiUser} *CLIENTE:* ${c.name}\n${emojiPin} *ENDEREÇO:* ${addressWithNumber || 'Não informado'}`;
     navigator.clipboard.writeText(text);
-    alert('Dados de entrega copiados!');
+    const encodedText = encodeURIComponent(text);
+    window.open(`https://wa.me/?text=${encodedText}`, '_blank');
   };
 
   const isBirthdayToday = (birthDate: string) => {
@@ -1249,7 +1252,7 @@ const CustomerManagementView = ({ customers, setCustomers, sales, settings }: an
         </button>
         </div>
 
-      <div className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-zinc-100 space-y-4 shrink-0">
+      <div className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-zinc-100 shrink-0">
         <div className="flex flex-wrap gap-4 items-center justify-between">
           <div className="flex-1 min-w-[300px] relative group">
             <Search size={20} className="absolute left-6 top-1/2 -translate-y-1/2 text-zinc-300 group-focus-within:text-red-500 transition-colors" />
@@ -1262,51 +1265,50 @@ const CustomerManagementView = ({ customers, setCustomers, sales, settings }: an
             />
           </div>
           
-          <div className="flex flex-col items-end gap-2">
-            <div className="flex items-center gap-3">
-              <div className="flex bg-zinc-50 p-1.5 rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
-                {(['day', 'month', 'year'] as const).map((p) => (
-                  <button 
-                    key={p} 
-                    onClick={() => { setPeriod(p); setIsFiltering(true); }} 
-                    className={`px-6 py-2 rounded-xl text-[9px] font-black uppercase transition-all ${isFiltering && period === p ? 'bg-red-600 text-white shadow-lg shadow-red-100' : 'text-zinc-400 hover:bg-zinc-100'}`}
-                  >
-                    {p === 'day' ? 'DIA' : p === 'month' ? 'MÊS' : 'ANO'}
-                  </button>
-                ))}
-              </div>
-              {isFiltering && (
+          <div className="flex items-center gap-3">
+            <div className="flex bg-zinc-50 p-1.5 rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
+              {(['day', 'month', 'year'] as const).map((p) => (
                 <button 
-                  onClick={() => setIsFiltering(false)}
-                  className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-all"
-                  title="Desativar Filtro de Período"
+                  key={p} 
+                  onClick={() => { setPeriod(p); setIsFiltering(true); }} 
+                  className={`px-6 py-2 rounded-xl text-[9px] font-black uppercase transition-all ${isFiltering && period === p ? 'bg-red-600 text-white shadow-lg shadow-red-100' : 'text-zinc-400 hover:bg-zinc-100'}`}
                 >
-                  <X size={16} />
+                  {p === 'day' ? 'DIA' : p === 'month' ? 'MÊS' : 'ANO'}
                 </button>
-              )}
+              ))}
             </div>
             
             {isFiltering && (
-              <div className="flex items-center gap-3 animate-in fade-in slide-in-from-top-1">
+              <div className="flex items-center gap-3 animate-in fade-in slide-in-from-right-2">
                 {period === 'day' && (
-                  <div className="flex items-center gap-2 bg-red-50 px-3 py-1.5 rounded-xl border border-red-100">
+                  <div className="flex items-center gap-2 bg-red-50 px-4 py-2 rounded-xl border border-red-100">
                     <span className="text-[8px] font-black text-red-400 uppercase tracking-widest">DIA:</span>
                     <input type="date" value={selectedDay} onChange={(e) => setSelectedDay(e.target.value)} className="bg-transparent text-[11px] font-black text-red-700 outline-none cursor-pointer" />
                   </div>
                 )}
                 {period === 'month' && (
-                  <div className="flex items-center gap-2 bg-red-50 px-3 py-1.5 rounded-xl border border-red-100">
+                  <div className="flex items-center gap-2 bg-red-50 px-4 py-2 rounded-xl border border-red-100">
                     <span className="text-[8px] font-black text-red-400 uppercase tracking-widest">MÊS:</span>
                     <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="bg-transparent text-[11px] font-black text-red-700 outline-none cursor-pointer" />
                   </div>
                 )}
                 {period === 'year' && (
-                  <div className="flex items-center gap-2 bg-red-50 px-3 py-1.5 rounded-xl border border-red-100">
+                  <div className="flex items-center gap-2 bg-red-50 px-4 py-2 rounded-xl border border-red-100">
                     <span className="text-[8px] font-black text-red-400 uppercase tracking-widest">ANO:</span>
                     <input type="number" min="2000" max="2100" value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="bg-transparent text-[11px] font-black text-red-700 outline-none cursor-pointer w-16" />
                   </div>
                 )}
               </div>
+            )}
+
+            {(isFiltering || search) && (
+              <button 
+                onClick={() => { setIsFiltering(false); setSearch(''); }}
+                className="p-2.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors flex-shrink-0"
+                title="Limpar Filtros"
+              >
+                <X size={18} />
+              </button>
             )}
           </div>
         </div>
@@ -1625,9 +1627,13 @@ const SalesViewComponent = ({ user, products, setProducts, setSales, setMovement
         alert('Cliente não encontrado.');
         return;
     }
-    const text = `👤 *CLIENTE:* ${customer.name}\n📍 *ENDEREÇO:* ${customer.address || 'Não informado'}`;
+    const addressWithNumber = customer.addressNumber ? `${customer.address}, Nº ${customer.addressNumber}` : customer.address;
+    const emojiUser = String.fromCodePoint(0x1F464);
+    const emojiPin = String.fromCodePoint(0x1F4CD);
+    const text = `${emojiUser} *CLIENTE:* ${customer.name}\n${emojiPin} *ENDEREÇO:* ${addressWithNumber || 'Não informado'}`;
     navigator.clipboard.writeText(text);
-    alert('Dados de entrega copiados!');
+    const encodedText = encodeURIComponent(text);
+    window.open(`https://wa.me/?text=${encodedText}`, '_blank');
   };
 
   const addDirectly = useCallback((p: Product) => {
