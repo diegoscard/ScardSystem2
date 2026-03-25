@@ -1159,12 +1159,9 @@ const CustomerManagementView = ({ customers, setCustomers, sales, settings }: an
 
   const handleCopyDelivery = (c: Customer) => {
     const addressWithNumber = c.addressNumber ? `${c.address}, Nº ${c.addressNumber}` : c.address;
-    const emojiUser = String.fromCodePoint(0x1F464);
-    const emojiPin = String.fromCodePoint(0x1F4CD);
-    const text = `${emojiUser} *CLIENTE:* ${c.name}\n${emojiPin} *ENDEREÇO:* ${addressWithNumber || 'Não informado'}`;
+    const text = `👤 *CLIENTE:* ${c.name}\n📍 *ENDEREÇO:* ${addressWithNumber || 'Não informado'}`;
     navigator.clipboard.writeText(text);
-    const encodedText = encodeURIComponent(text);
-    window.open(`https://wa.me/?text=${encodedText}`, '_blank');
+    alert('Dados de entrega copiados!');
   };
 
   const isBirthdayToday = (birthDate: string) => {
@@ -1627,13 +1624,9 @@ const SalesViewComponent = ({ user, products, setProducts, setSales, setMovement
         alert('Cliente não encontrado.');
         return;
     }
-    const addressWithNumber = customer.addressNumber ? `${customer.address}, Nº ${customer.addressNumber}` : customer.address;
-    const emojiUser = String.fromCodePoint(0x1F464);
-    const emojiPin = String.fromCodePoint(0x1F4CD);
-    const text = `${emojiUser} *CLIENTE:* ${customer.name}\n${emojiPin} *ENDEREÇO:* ${addressWithNumber || 'Não informado'}`;
+    const text = `👤 *CLIENTE:* ${customer.name}\n📍 *ENDEREÇO:* ${customer.address || 'Não informado'}`;
     navigator.clipboard.writeText(text);
-    const encodedText = encodeURIComponent(text);
-    window.open(`https://wa.me/?text=${encodedText}`, '_blank');
+    alert('Dados de entrega copiados!');
   };
 
   const addDirectly = useCallback((p: Product) => {
