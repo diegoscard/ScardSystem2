@@ -1252,11 +1252,11 @@ const CustomerManagementView = ({ customers, setCustomers, sales, settings }: an
       <div className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-zinc-100 shrink-0">
         <div className="flex flex-wrap gap-4 items-center justify-between">
           <div className="flex-1 min-w-[300px] relative group">
-            <Search size={20} className="absolute left-6 top-1/2 -translate-y-1/2 text-zinc-300 group-focus-within:text-red-500 transition-colors" />
+            <Search size={20} className="absolute left-5 top-1/2 -translate-y-1/2 text-zinc-300 group-focus-within:text-red-500 transition-colors" />
             <input 
               type="text" 
               placeholder="Buscar por nome, CPF/CNPJ ou telefone..." 
-              className="w-full pl-16 pr-6 py-4 bg-zinc-50 rounded-2xl border-2 border-zinc-100 focus:border-red-500 outline-none transition-all font-bold text-sm"
+              className="w-full pl-12 pr-6 py-2.5 bg-zinc-50 rounded-2xl border border-zinc-200 shadow-sm focus:border-red-500 outline-none transition-all font-bold text-sm"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -1278,19 +1278,19 @@ const CustomerManagementView = ({ customers, setCustomers, sales, settings }: an
             {isFiltering && (
               <div className="flex items-center gap-3 animate-in fade-in slide-in-from-right-2">
                 {period === 'day' && (
-                  <div className="flex items-center gap-2 bg-red-50 px-4 py-2 rounded-xl border border-red-100">
+                  <div className="flex items-center gap-2 bg-red-50 px-4 py-2.5 rounded-2xl border border-red-100 shadow-sm">
                     <span className="text-[8px] font-black text-red-400 uppercase tracking-widest">DIA:</span>
                     <input type="date" value={selectedDay} onChange={(e) => setSelectedDay(e.target.value)} className="bg-transparent text-[11px] font-black text-red-700 outline-none cursor-pointer" />
                   </div>
                 )}
                 {period === 'month' && (
-                  <div className="flex items-center gap-2 bg-red-50 px-4 py-2 rounded-xl border border-red-100">
+                  <div className="flex items-center gap-2 bg-red-50 px-4 py-2.5 rounded-2xl border border-red-100 shadow-sm">
                     <span className="text-[8px] font-black text-red-400 uppercase tracking-widest">MÊS:</span>
                     <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="bg-transparent text-[11px] font-black text-red-700 outline-none cursor-pointer" />
                   </div>
                 )}
                 {period === 'year' && (
-                  <div className="flex items-center gap-2 bg-red-50 px-4 py-2 rounded-xl border border-red-100">
+                  <div className="flex items-center gap-2 bg-red-50 px-4 py-2.5 rounded-2xl border border-red-100 shadow-sm">
                     <span className="text-[8px] font-black text-red-400 uppercase tracking-widest">ANO:</span>
                     <input type="number" min="2000" max="2100" value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="bg-transparent text-[11px] font-black text-red-700 outline-none cursor-pointer w-16" />
                   </div>
