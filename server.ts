@@ -3,6 +3,9 @@ import { createServer as createViteServer } from 'vite';
 import pg from 'pg';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,8 +17,17 @@ async function startServer() {
   const PORT = 3000;
 
   // Database connection
+  const connectionString = process.env.POSTGRES_URL?.replace(/^"|"$/g, ''); // Remove quotes if present
+
+  if (!connectionString) {
+    console.error('CRITICAL: POSTGRES_URL environment variable is not set.');
+  } else {
+    const url = new URL(connectionString);
+    console.log(`Attempting to connect to database host: ${url.hostname}`);
+  }
+
   const pool = new Pool({
-    connectionString: process.env.POSTGRES_URL,
+    connectionString: connectionString,
     ssl: {
       rejectUnauthorized: false
     }
@@ -23,16 +35,22 @@ async function startServer() {
 
   // Initialize database
   try {
-    await pool.query(`
+    const client = await pool.connect();
+    console.log('Successfully connected to PostgreSQL');
+    await client.query(`
       CREATE TABLE IF NOT EXISTS app_data (
         key TEXT PRIMARY KEY,
         data JSONB NOT NULL,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
+    client.release();
     console.log('Database initialized');
   } catch (err) {
     console.error('Database initialization error:', err);
+    if ((err as any).code === 'EAI_AGAIN') {
+      console.error('DNS Resolution failed. Please check if the database host in POSTGRES_URL is correct and accessible.');
+    }
   }
 
   app.use(express.json({ limit: '50mb' }));
