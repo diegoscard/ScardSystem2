@@ -279,7 +279,12 @@ const usePersistedState = <T,>(key: string, initial: T): [T, React.Dispatch<Reac
           const initialAny = initial as any;
           setState({ ...initial, ...data, cardFees: { ...initialAny.cardFees, ...(data.cardFees || {}) } } as T);
         } else {
-          setState(data);
+          // Garante que chaves que esperam arrays recebam arrays
+          if (Array.isArray(initial) && !Array.isArray(data)) {
+            setState(initial);
+          } else {
+            setState(data);
+          }
         }
       }
       isLoaded.current = true;
@@ -3079,9 +3084,9 @@ const DashboardViewComponent = ({ products, sales, cashSession, cashHistory }: a
     setCommTiers(commTiers.filter((_, i) => i !== index));
   };
 
-  const totalStock = products.reduce((acc: number, p: any) => acc + p.stock, 0);
-  const totalStockCost = products.reduce((acc: number, p: any) => acc + (p.cost * p.stock), 0);
-  const totalStockSaleValue = products.reduce((acc: number, p: any) => acc + (p.price * p.stock), 0);
+  const totalStock = Array.isArray(products) ? products.reduce((acc: number, p: any) => acc + p.stock, 0) : 0;
+  const totalStockCost = Array.isArray(products) ? products.reduce((acc: number, p: any) => acc + (p.cost * p.stock), 0) : 0;
+  const totalStockSaleValue = Array.isArray(products) ? products.reduce((acc: number, p: any) => acc + (p.price * p.stock), 0) : 0;
   
   const totalReceivedForBadges = stats.totals.cash + stats.totals.pix + stats.totals.card;
 
