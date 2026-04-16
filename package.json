@@ -4,27 +4,20 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
+    "dev": "vite",
     "build": "tsc && vite build",
     "lint": "tsc --noEmit",
-    "preview": "vite preview",
-    "start": "node dist/server.js"
+    "preview": "vite preview"
   },
   "dependencies": {
-    "dotenv": "^17.4.2",
-    "express": "^5.2.1",
     "lucide-react": "^0.454.0",
     "papaparse": "^5.5.3",
-    "pg": "^8.20.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "tsx": "^4.21.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "@types/express": "^5.0.6",
     "@types/node": "^20.0.0",
-    "@types/pg": "^8.20.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.1",

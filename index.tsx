@@ -231,125 +231,34 @@ const INITIAL_CATEGORIES = [
 
 // --- COMPONENTE PRINCIPAL ---
 
-// --- UTILITÁRIOS DE BANCO DE DADOS (POSTGRES) ---
-const db = {
-  async get(key: string) {
-    try {
-      const res = await fetch(`/api/data/${key}`);
-      if (res.ok) return await res.json();
-    } catch (e) {
-      console.error(`Error fetching ${key}:`, e);
-    }
-    return null;
-  },
-  async set(key: string, data: any) {
-    try {
-      await fetch(`/api/data/${key}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-    } catch (e) {
-      console.error(`Error saving ${key}:`, e);
-    }
-  },
-  async migrate(items: Record<string, any>) {
-    try {
-      await fetch('/api/migrate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(items)
-      });
-    } catch (e) {
-      console.error('Migration error:', e);
-      throw e;
-    }
-  }
-};
-
-const usePersistedState = <T,>(key: string, initial: T): [T, React.Dispatch<React.SetStateAction<T>>] => {
-  const [state, setState] = useState<T>(initial);
-  const isLoaded = useRef(false);
-
-  useEffect(() => {
-    const load = async () => {
-      const data = await db.get(key);
-      if (data !== null) {
-        if (key === 'db_settings') {
-          const initialAny = initial as any;
-          setState({ ...initial, ...data, cardFees: { ...initialAny.cardFees, ...(data.cardFees || {}) } } as T);
-        } else {
-          // Garante que chaves que esperam arrays recebam arrays
-          if (Array.isArray(initial) && !Array.isArray(data)) {
-            setState(initial);
-          } else {
-            setState(data);
-          }
-        }
-      }
-      isLoaded.current = true;
-    };
-    load();
-  }, [key]);
-
-  useEffect(() => {
-    if (isLoaded.current) {
-      db.set(key, state);
-    }
-  }, [key, state]);
-
-  return [state, setState];
-};
-
 const App = () => {
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [accessKeyInput, setAccessKeyInput] = useState('');
   const [rememberKey, setRememberKey] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
-  const [isDataLoaded, setIsDataLoaded] = useState(false);
   
   const [user, setUser] = useState<User | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-
-  // Migration logic
-  useEffect(() => {
-    const runMigration = async () => {
-      const keys = [
-        'db_users', 'db_products', 'db_suppliers', 'db_categories', 
-        'db_movements', 'db_sales', 'db_cash_session', 'db_cash_history', 
-        'db_settings', 'db_exchange_credit', 'db_key_registrations', 'db_customers',
-        'dash_comm_tiers', 'scard_saved_access_key'
-      ];
-      
-      const migrationData: Record<string, any> = {};
-      let hasData = false;
-      
-      for (const key of keys) {
-        const local = localStorage.getItem(key);
-        if (local) {
-          try {
-            migrationData[key] = JSON.parse(local);
-            hasData = true;
-          } catch (e) {}
+  const usePersistedState = <T,>(key: string, initial: T): [T, React.Dispatch<React.SetStateAction<T>>] => {
+    const [state, setState] = useState<T>(() => {
+      const stored = localStorage.getItem(key);
+      try {
+        if (!stored) return initial;
+        const parsed = JSON.parse(stored);
+        if (key === 'db_settings') {
+          const initialAny = initial as any;
+          return { ...initial, ...parsed, cardFees: { ...initialAny.cardFees, ...(parsed.cardFees || {}) } } as T;
         }
+        return parsed;
+      } catch (e) {
+        return initial;
       }
-      
-      const migrated = localStorage.getItem('scard_migrated_v2');
-      if (hasData && !migrated) {
-        try {
-          await db.migrate(migrationData);
-          localStorage.setItem('scard_migrated_v2', 'true');
-          console.log('Migration to PostgreSQL successful');
-        } catch (e) {
-          console.error('Migration failed', e);
-        }
-      }
-      setIsDataLoaded(true);
-    };
-    runMigration();
-  }, []);
+    });
+    useEffect(() => { localStorage.setItem(key, JSON.stringify(state)); }, [key, state]);
+    return [state, setState];
+  };
 
   const [dbUsers, setDbUsers] = usePersistedState<User[]>('db_users', []);
   const [products, setProducts] = usePersistedState<Product[]>('db_products', []);
@@ -370,18 +279,15 @@ const App = () => {
   const deviceHwid = useMemo(() => generateHWID(getDeviceFingerprint()), []);
 
   useEffect(() => {
-    const checkSavedKey = async () => {
-      const savedKey = await db.get('scard_saved_access_key');
-      if (savedKey && VALID_ACCESS_KEYS.includes(savedKey)) {
-        if (keyRegistrations[savedKey] && keyRegistrations[savedKey] !== deviceHwid) {
-          await db.set('scard_saved_access_key', null);
-          return;
-        }
-        setIsUnlocked(true);
+    const savedKey = localStorage.getItem('scard_saved_access_key');
+    if (savedKey && VALID_ACCESS_KEYS.includes(savedKey)) {
+      if (keyRegistrations[savedKey] && keyRegistrations[savedKey] !== deviceHwid) {
+        localStorage.removeItem('scard_saved_access_key');
+        return;
       }
-    };
-    if (isDataLoaded) checkSavedKey();
-  }, [keyRegistrations, deviceHwid, isDataLoaded]);
+      setIsUnlocked(true);
+    }
+  }, [keyRegistrations, deviceHwid]);
 
   const handleVerifyAccessKey = (e: React.FormEvent) => {
     e.preventDefault();
@@ -404,7 +310,7 @@ const App = () => {
         }
 
         if (rememberKey) {
-          db.set('scard_saved_access_key', trimmedKey);
+          localStorage.setItem('scard_saved_access_key', trimmedKey);
         }
         setIsUnlocked(true);
       } else {
@@ -473,21 +379,27 @@ const App = () => {
     setAuthMode('login');
   };
 
-  const [customers, setCustomers] = usePersistedState<Customer[]>('db_customers', []);
+  const [customers, setCustomers] = useState<Customer[]>(() => {
+    const saved = localStorage.getItem('db_customers');
+    return saved ? JSON.parse(saved) : [];
+  });
 
-  const handleExportBackup = async () => {
+  useEffect(() => {
+    localStorage.setItem('db_customers', JSON.stringify(customers));
+  }, [customers]);
+
+  const handleExportBackup = () => {
     const dataKeys = [
       'db_users', 'db_products', 'db_suppliers', 'db_categories', 
       'db_movements', 'db_sales', 'db_cash_session', 'db_cash_history', 
-      'db_settings', 'db_exchange_credit', 'db_key_registrations', 'db_customers',
-      'dash_comm_tiers'
+      'db_settings', 'db_exchange_credit', 'db_key_registrations', 'db_customers'
     ];
     
     const backupData: Record<string, any> = {};
-    for (const key of dataKeys) {
-      const data = await db.get(key);
-      backupData[key] = data;
-    }
+    dataKeys.forEach(key => {
+      const stored = localStorage.getItem(key);
+      backupData[key] = stored ? JSON.parse(stored) : null;
+    });
 
     const jsonString = JSON.stringify(backupData);
     const encodedData = btoa(unescape(encodeURIComponent(jsonString)));
@@ -522,12 +434,12 @@ const App = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!window.confirm("ATENÇÃO: Restaurar o backup irá sobrescrever TODOS os dados atuais no banco de dados. Deseja continuar?")) {
+    if (!window.confirm("ATENÇÃO: Restaurar o backup irá sobrescrever TODOS os dados atuais (estoque, vendas, usuários e licenças). Deseja continuar?")) {
       return;
     }
 
     const reader = new FileReader();
-    reader.onload = async (event) => {
+    reader.onload = (event) => {
       try {
         const content = event.target?.result as string;
         if (!content.startsWith('SCARDSYS_SECURE_BKPV1:')) {
@@ -536,8 +448,11 @@ const App = () => {
         const encodedData = content.replace('SCARDSYS_SECURE_BKPV1:', '');
         const decodedString = decodeURIComponent(escape(atob(encodedData)));
         const data = JSON.parse(decodedString);
-
-        await db.migrate(data);
+        Object.entries(data).forEach(([key, value]) => {
+          if (value !== null) {
+            localStorage.setItem(key, JSON.stringify(value));
+          }
+        });
         alert("Backup restaurado com sucesso! O sistema será reiniciado.");
         window.location.reload();
       } catch (err) {
@@ -2967,13 +2882,20 @@ const DashboardViewComponent = ({ products, sales, cashSession, cashHistory }: a
   
   const [commFilterMonth, setCommFilterMonth] = useState(new Date().toISOString().slice(0, 7));
   
-  const [commTiers, setCommTiers] = usePersistedState<CommissionTier[]>('dash_comm_tiers', [
-    { min: 0, rate: 1 },
-    { min: 20000, rate: 2 },
-    { min: 30000, rate: 3 },
-    { min: 40000, rate: 4 },
-    { min: 50000, rate: 5 }
-  ]);
+  const [commTiers, setCommTiers] = useState<CommissionTier[]>(() => {
+    const saved = localStorage.getItem('dash_comm_tiers');
+    return saved ? JSON.parse(saved) : [
+      { min: 0, rate: 1 },
+      { min: 20000, rate: 2 },
+      { min: 30000, rate: 3 },
+      { min: 40000, rate: 4 },
+      { min: 50000, rate: 5 }
+    ];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('dash_comm_tiers', JSON.stringify(commTiers));
+  }, [commTiers]);
 
   const filteredSales = useMemo(() => {
     return sales.filter((s: Sale) => {
@@ -3084,9 +3006,9 @@ const DashboardViewComponent = ({ products, sales, cashSession, cashHistory }: a
     setCommTiers(commTiers.filter((_, i) => i !== index));
   };
 
-  const totalStock = Array.isArray(products) ? products.reduce((acc: number, p: any) => acc + p.stock, 0) : 0;
-  const totalStockCost = Array.isArray(products) ? products.reduce((acc: number, p: any) => acc + (p.cost * p.stock), 0) : 0;
-  const totalStockSaleValue = Array.isArray(products) ? products.reduce((acc: number, p: any) => acc + (p.price * p.stock), 0) : 0;
+  const totalStock = products.reduce((acc: number, p: any) => acc + p.stock, 0);
+  const totalStockCost = products.reduce((acc: number, p: any) => acc + (p.cost * p.stock), 0);
+  const totalStockSaleValue = products.reduce((acc: number, p: any) => acc + (p.price * p.stock), 0);
   
   const totalReceivedForBadges = stats.totals.cash + stats.totals.pix + stats.totals.card;
 
