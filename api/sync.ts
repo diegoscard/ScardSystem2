@@ -28,15 +28,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS store_data (
         store_key VARCHAR(255) PRIMARY KEY,
-        data JSONB NOT NULL
+        data JSONB NOT NULL,
+        updated_at BIGINT DEFAULT (extract(epoch from now()) * 1000)
       );
     `);
 
+    // Ensure updated_at column exists
+    await pool.query(`
+      ALTER TABLE store_data ADD COLUMN IF NOT EXISTS updated_at BIGINT DEFAULT (extract(epoch from now()) * 1000);
+    `);
+
     if (req.method === 'GET') {
-      const result = await pool.query('SELECT store_key, data FROM store_data');
+      const result = await pool.query('SELECT store_key, data, updated_at FROM store_data');
       const stateObj: Record<string, any> = {};
       for (const row of result.rows) {
-        stateObj[row.store_key] = row.data;
+        stateObj[row.store_key] = {
+           data: row.data,
+           updatedAt: row.updated_at ? Number(row.updated_at) : Date.now()
+        };
       }
       return res.status(200).json(stateObj);
     } 

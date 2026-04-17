@@ -50,8 +50,14 @@ async function initDB() {
     await client.query(`
       CREATE TABLE IF NOT EXISTS store_data (
         store_key VARCHAR(255) PRIMARY KEY,
-        data JSONB NOT NULL
+        data JSONB NOT NULL,
+        updated_at BIGINT DEFAULT (extract(epoch from now()) * 1000)
       );
+    `);
+
+    // Ensure updated_at column exists (for migration)
+    await client.query(`
+      ALTER TABLE store_data ADD COLUMN IF NOT EXISTS updated_at BIGINT DEFAULT (extract(epoch from now()) * 1000);
     `);
 
     // Create session table for "No Rastro local" persistence
@@ -114,10 +120,13 @@ app.get("/api/health", (req, res) => {
 
 app.get("/api/sync", async (req, res) => {
   try {
-    const result = await pool.query('SELECT store_key, data FROM store_data');
+    const result = await pool.query('SELECT store_key, data, updated_at FROM store_data');
     const stateObj: Record<string, any> = {};
     for (const row of result.rows) {
-      stateObj[row.store_key] = row.data;
+      stateObj[row.store_key] = {
+        data: row.data,
+        updatedAt: row.updated_at ? Number(row.updated_at) : Date.now()
+      };
     }
     res.json(stateObj);
   } catch (error) {
@@ -130,16 +139,17 @@ app.post("/api/sync/:key", async (req, res) => {
   try {
     const { key } = req.params;
     const body = req.body;
+    const now = Date.now();
     await pool.query(`
-      INSERT INTO store_data (store_key, data)
-      VALUES ($1, $2)
-      ON CONFLICT (store_key) DO UPDATE SET data = EXCLUDED.data;
-    `, [key, JSON.stringify(body)]);
+      INSERT INTO store_data (store_key, data, updated_at)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (store_key) DO UPDATE SET data = EXCLUDED.data, updated_at = EXCLUDED.updated_at;
+    `, [key, JSON.stringify(body), now]);
     
     // Broadcast update to all clients
-    broadcast({ type: 'update', key, data: body });
+    broadcast({ type: 'update', key, data: body, updatedAt: now });
     
-    res.json({ success: true });
+    res.json({ success: true, updatedAt: now });
   } catch (error) {
     res.status(500).json({ error: 'DB Error' });
   }

@@ -40,17 +40,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS store_data (
         store_key VARCHAR(255) PRIMARY KEY,
-        data JSONB NOT NULL
+        data JSONB NOT NULL,
+        updated_at BIGINT DEFAULT (extract(epoch from now()) * 1000)
       );
     `);
 
+    // Ensure updated_at column exists
     await pool.query(`
-      INSERT INTO store_data (store_key, data)
-      VALUES ($1, $2)
-      ON CONFLICT (store_key) DO UPDATE SET data = EXCLUDED.data;
-    `, [key, JSON.stringify(parsedBody)]);
+      ALTER TABLE store_data ADD COLUMN IF NOT EXISTS updated_at BIGINT DEFAULT (extract(epoch from now()) * 1000);
+    `);
+
+    const now = Date.now();
+    await pool.query(`
+      INSERT INTO store_data (store_key, data, updated_at)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (store_key) DO UPDATE SET data = EXCLUDED.data, updated_at = EXCLUDED.updated_at;
+    `, [key, JSON.stringify(parsedBody), now]);
     
-    return res.status(200).json({ success: true });
+    return res.status(200).json({ success: true, updatedAt: now });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: 'DB Error' });

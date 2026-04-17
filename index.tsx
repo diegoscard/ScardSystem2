@@ -43,9 +43,12 @@ const formatCurrency = (val: number) => {
 };
 
 const usePersistedState = <T,>(key: string, initial: T): [T, React.Dispatch<React.SetStateAction<T>>] => {
+  const lastSyncRef = useRef<number>(globalStoreData[key]?.updatedAt || 0);
+  
   const [state, setState] = useState<T>(() => {
     // Prioridade: Banco de Dados PG (via globalStoreData)
-    let stored = globalStoreData[key] ? JSON.stringify(globalStoreData[key]) : null;
+    const storedItem = globalStoreData[key];
+    let stored = storedItem ? JSON.stringify(storedItem.data) : null;
     
     try {
       if (!stored) return initial;
@@ -67,9 +70,11 @@ const usePersistedState = <T,>(key: string, initial: T): [T, React.Dispatch<Reac
   useEffect(() => {
     const handleStoreUpdate = (e: any) => {
       if (e.detail.key === key) {
-        // Marcamos que esta atualização veio do servidor para evitar loop de retorno
-        isRemoteUpdate.current = true;
-        setState(e.detail.data);
+        if (e.detail.updatedAt > lastSyncRef.current) {
+          lastSyncRef.current = e.detail.updatedAt;
+          isRemoteUpdate.current = true;
+          setState(e.detail.data);
+        }
       }
     };
     window.addEventListener('store-update' as any, handleStoreUpdate);
@@ -89,7 +94,12 @@ const usePersistedState = <T,>(key: string, initial: T): [T, React.Dispatch<Reac
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(state)
-      }).catch(err => console.error("Erro sincronizando DB Postgres", key, err));
+      })
+      .then(res => res.json())
+      .then(res => {
+        if (res.updatedAt) lastSyncRef.current = res.updatedAt;
+      })
+      .catch(err => console.error("Erro sincronizando DB Postgres", key, err));
     }
     isFirstRender.current = false;
   }, [key, state]);
@@ -4147,9 +4157,9 @@ const DataProvider = () => {
         try {
           const message = JSON.parse(event.data);
           if (message.type === 'update') {
-            globalStoreData[message.key] = message.data;
+            globalStoreData[message.key] = { data: message.data, updatedAt: message.updatedAt };
             window.dispatchEvent(new CustomEvent('store-update', { 
-              detail: { key: message.key, data: message.data } 
+              detail: { key: message.key, data: message.data, updatedAt: message.updatedAt } 
             }));
           }
         } catch (e) {
@@ -4172,7 +4182,28 @@ const DataProvider = () => {
 
     const wsInstance = setupWS();
 
-    return () => wsInstance.close();
+    // Polling de fallback (acada 5 segundos) para sincronizar entre diferentes servidores (Vercel vs AI Studio)
+    const pollInterval = setInterval(() => {
+       fetch('/api/sync')
+         .then(res => res.json())
+         .then(newData => {
+           Object.entries(newData).forEach(([key, value]: [string, any]) => {
+             const currentLocal = globalStoreData[key];
+             if (!currentLocal || value.updatedAt > (currentLocal.updatedAt || 0)) {
+               globalStoreData[key] = value;
+               window.dispatchEvent(new CustomEvent('store-update', { 
+                 detail: { key, data: value.data, updatedAt: value.updatedAt } 
+               }));
+             }
+           });
+         })
+         .catch(e => console.warn("Erro no polling de sincronização:", e));
+    }, 5000);
+
+    return () => {
+      wsInstance.close();
+      clearInterval(pollInterval);
+    };
   }, []);
 
   if (error) {
