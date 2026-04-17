@@ -55,6 +55,10 @@ async function initDB() {
 }
 
 // Global data loading API
+app.get("/api/health", (req, res) => {
+  res.json({ status: "express_ok" });
+});
+
 app.get("/api/sync", async (req, res) => {
   try {
     const result = await pool.query('SELECT store_key, data FROM store_data');
