@@ -81,7 +81,7 @@ app.post("/api/license/validate", async (req, res) => {
   try {
     const { key, hwid } = req.body;
     // Uses db_adminkeys as requested by user
-    const result = await pool.query('SELECT * FROM "db_adminkeys" WHERE "Keys" = $1 AND status = true', [key]);
+    const result = await pool.query('SELECT * FROM "db_adminkeys" WHERE "key_value" = $1 AND status = true', [key]);
     
     if (result.rows.length === 0) {
       return res.json({ valid: false, message: 'Chave inválida ou inativa no banco central' });
@@ -91,7 +91,7 @@ app.post("/api/license/validate", async (req, res) => {
     
     // First time use: register HWID in hwid_hash column
     if (!license.hwid_hash) {
-      await pool.query('UPDATE "db_adminkeys" SET hwid_hash = $1 WHERE "Keys" = $2', [hwid, key]);
+      await pool.query('UPDATE "db_adminkeys" SET hwid_hash = $1 WHERE "key_value" = $2', [hwid, key]);
       return res.json({ valid: true });
     }
     
