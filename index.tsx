@@ -716,7 +716,7 @@ const App = () => {
               <span className="font-black uppercase text-[9px] tracking-widest">Fechar Caixa</span>
             </button>
           )}
-          <button type="button" onClick={() => { setIsUnlocked(false); setUser(null); }} className="flex items-center space-x-3 text-zinc-500 hover:text-red-400 transition-all w-full px-4 py-3 rounded-xl hover:bg-red-500/5 group">
+          <button type="button" onClick={() => { setUser(null); }} className="flex items-center space-x-3 text-zinc-500 hover:text-red-400 transition-all w-full px-4 py-3 rounded-xl hover:bg-red-500/5 group">
             <LogOut size={18} />
             <span className="font-black uppercase text-[9px] tracking-widest">Sair</span>
           </button>
