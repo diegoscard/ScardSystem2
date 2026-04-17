@@ -61,11 +61,14 @@ const usePersistedState = <T,>(key: string, initial: T): [T, React.Dispatch<Reac
   });
 
   const isFirstRender = useRef(true);
+  const isRemoteUpdate = useRef(false);
 
   // Escutar atualizações via WebSocket enviadas pelo DataProvider
   useEffect(() => {
     const handleStoreUpdate = (e: any) => {
       if (e.detail.key === key) {
+        // Marcamos que esta atualização veio do servidor para evitar loop de retorno
+        isRemoteUpdate.current = true;
         setState(e.detail.data);
       }
     };
@@ -76,6 +79,12 @@ const usePersistedState = <T,>(key: string, initial: T): [T, React.Dispatch<Reac
   useEffect(() => { 
     // Sincronizar EXCLUSIVAMENTE com banco de dados Vercel Postgres em background
     if (!isFirstRender.current) {
+      if (isRemoteUpdate.current) {
+        // Se foi uma atualização remota (WS), apenas resetamos a flag e não enviamos de volta
+        isRemoteUpdate.current = false;
+        return;
+      }
+
       fetch(`/api/sync/${key}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -274,6 +283,7 @@ const INITIAL_CATEGORIES = [
 
 const App = () => {
   const [isUnlocked, setIsUnlocked] = useState(false);
+  const [isRestoringSession, setIsRestoringSession] = useState(true);
   const [accessKeyInput, setAccessKeyInput] = useState('');
   const [rememberKey, setRememberKey] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
@@ -303,6 +313,7 @@ const App = () => {
   useEffect(() => {
     // Tenta desbloquear automaticamente se o HWID deste dispositivo já possui uma chave ativa no banco
     if (deviceHwid) {
+      setIsRestoringSession(true);
       fetch('/api/license/check-hwid', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -313,22 +324,28 @@ const App = () => {
         if (data.valid) {
           setIsUnlocked(true);
           // Após desbloquear o hardware, tenta restaurar a sessão do usuário (F5 persistence)
-          fetch(`/api/auth/session/${deviceHwid}`)
-            .then(res => res.json())
-            .then(sessionData => {
-              if (sessionData.user) {
-                setUser(sessionData.user);
-                // Restaurar vista baseada no cargo
-                if (sessionData.user.role === 'atendente') {
-                  setCurrentView('sales');
-                } else {
-                  setCurrentView('dashboard');
-                }
-              }
-            });
+          return fetch(`/api/auth/session/${deviceHwid}`);
+        }
+        return null;
+      })
+      .then(res => res ? res.json() : null)
+      .then(sessionData => {
+        if (sessionData && sessionData.user) {
+          setUser(sessionData.user);
+          // Restaurar vista baseada no cargo
+          if (sessionData.user.role === 'atendente') {
+            setCurrentView('sales');
+          } else {
+            setCurrentView('dashboard');
+          }
         }
       })
-      .catch(err => console.error("Erro ao verificar sessão automática:", err));
+      .catch(err => console.error("Erro ao verificar sessão automática:", err))
+      .finally(() => {
+        setIsRestoringSession(false);
+      });
+    } else {
+      setIsRestoringSession(false);
     }
   }, [deviceHwid]);
 
@@ -573,6 +590,15 @@ const App = () => {
     setShowCloseCashModal(false);
     alert('Caixa encerrado e registrado com sucesso!');
   };
+
+  if (isRestoringSession) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex flex-col gap-4 items-center justify-center p-6 text-center">
+        <div className="w-10 h-10 border-4 border-red-900 border-t-red-600 rounded-full animate-spin"></div>
+        <p className="text-red-600/50 text-[10px] uppercase font-black tracking-widest animate-pulse">Restaurando Sua Sessão...</p>
+      </div>
+    );
+  }
 
   if (!isUnlocked) {
     return (
