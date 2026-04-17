@@ -33,7 +33,7 @@ async function initDB() {
     `);
 
     // We do NOT create or seed the license table here anymore.
-    // The system now strictly uses db_adminkeys table managed by SCARDADMIN.
+    // The system now strictly uses keys table managed by SCARDADMIN.
     
     client.release();
     console.log("Database initialized successfully!");
