@@ -33,7 +33,7 @@ async function initDB() {
     `);
 
     // We do NOT create or seed the license table here anymore.
-    // The system now strictly uses ScardAdmin_chaves table managed by SCARDADMIN.
+    // The system now strictly uses db_adminkeys table managed by SCARDADMIN.
     
     client.release();
     console.log("Database initialized successfully!");
@@ -80,8 +80,8 @@ app.post("/api/sync/:key", async (req, res) => {
 app.post("/api/license/validate", async (req, res) => {
   try {
     const { key, hwid } = req.body;
-    // Uses ScardAdmin_chaves as requested by user
-    const result = await pool.query('SELECT * FROM "ScardAdmin_chaves" WHERE license_key = $1 AND status = true', [key]);
+    // Uses db_adminkeys as requested by user
+    const result = await pool.query('SELECT * FROM "db_adminkeys" WHERE "Keys" = $1 AND status = true', [key]);
     
     if (result.rows.length === 0) {
       return res.json({ valid: false, message: 'Chave inválida ou inativa no banco central' });
@@ -91,7 +91,7 @@ app.post("/api/license/validate", async (req, res) => {
     
     // First time use: register HWID in hwid_hash column
     if (!license.hwid_hash) {
-      await pool.query('UPDATE "ScardAdmin_chaves" SET hwid_hash = $1 WHERE license_key = $2', [hwid, key]);
+      await pool.query('UPDATE "db_adminkeys" SET hwid_hash = $1 WHERE "Keys" = $2', [hwid, key]);
       return res.json({ valid: true });
     }
     
@@ -108,7 +108,7 @@ app.post("/api/license/validate", async (req, res) => {
     return res.json({ valid: true });
   } catch (error) {
     console.error("Erro na validação de licença:", error);
-    res.status(500).json({ error: 'DB Error no servidor ou tabela ScardAdmin_chaves não encontrada' });
+    res.status(500).json({ error: 'DB Error no servidor ou tabela db_adminkeys não encontrada' });
   }
 });
 

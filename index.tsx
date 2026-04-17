@@ -18,6 +18,8 @@ import {
 
 // --- UTILITÁRIOS DE SEGURANÇA DE HARDWARE ---
 
+export const globalStoreData: Record<string, any> = {};
+
 const getDeviceFingerprint = () => {
   const { userAgent, language, hardwareConcurrency, platform } = navigator;
   const { width, height, colorDepth, availWidth, availHeight } = window.screen;
@@ -38,6 +40,41 @@ const generateHWID = (str: string) => {
 
 const formatCurrency = (val: number) => {
   return val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
+const usePersistedState = <T,>(key: string, initial: T): [T, React.Dispatch<React.SetStateAction<T>>] => {
+  const [state, setState] = useState<T>(() => {
+    // Prioridade: Banco de Dados PG (via globalStoreData)
+    let stored = globalStoreData[key] ? JSON.stringify(globalStoreData[key]) : null;
+    
+    try {
+      if (!stored) return initial;
+      const parsed = JSON.parse(stored);
+      if (key === 'db_settings') {
+        const initialAny = initial as any;
+        return { ...initial, ...parsed, cardFees: { ...initialAny.cardFees, ...(parsed.cardFees || {}) } } as T;
+      }
+      return parsed;
+    } catch (e) {
+      return initial;
+    }
+  });
+
+  const isFirstRender = useRef(true);
+
+  useEffect(() => { 
+    // Sincronizar EXCLUSIVAMENTE com banco de dados Vercel Postgres em background
+    if (!isFirstRender.current) {
+      fetch(`/api/sync/${key}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(state)
+      }).catch(err => console.error("Erro sincronizando DB Postgres", key, err));
+    }
+    isFirstRender.current = false;
+  }, [key, state]);
+
+  return [state, setState];
 };
 
 const parseCurrency = (val: string) => {
@@ -234,41 +271,6 @@ const App = () => {
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  const usePersistedState = <T,>(key: string, initial: T): [T, React.Dispatch<React.SetStateAction<T>>] => {
-    const [state, setState] = useState<T>(() => {
-      // Prioridade: Banco de Dados PG (via globalStoreData)
-      let stored = globalStoreData[key] ? JSON.stringify(globalStoreData[key]) : null;
-      
-      try {
-        if (!stored) return initial;
-        const parsed = JSON.parse(stored);
-        if (key === 'db_settings') {
-          const initialAny = initial as any;
-          return { ...initial, ...parsed, cardFees: { ...initialAny.cardFees, ...(parsed.cardFees || {}) } } as T;
-        }
-        return parsed;
-      } catch (e) {
-        return initial;
-      }
-    });
-
-    const isFirstRender = useRef(true);
-
-    useEffect(() => { 
-      // Sincronizar EXCLUSIVAMENTE com banco de dados Vercel Postgres em background
-      if (!isFirstRender.current) {
-        fetch(`/api/sync/${key}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(state)
-        }).catch(err => console.error("Erro sincronizando DB Postgres", key, err));
-      }
-      isFirstRender.current = false;
-    }, [key, state]);
-
-    return [state, setState];
-  };
-
   const [dbUsers, setDbUsers] = usePersistedState<User[]>('db_users', []);
   const [products, setProducts] = usePersistedState<Product[]>('db_products', []);
   const [suppliers, setSuppliers] = usePersistedState<Supplier[]>('db_suppliers', []);
@@ -4026,8 +4028,6 @@ const TeamViewComponent = ({ currentUser, users, setUsers }: any) => {
     </div>
   );
 };
-
-export const globalStoreData: Record<string, any> = {};
 
 const DataProvider = () => {
   const [loaded, setLoaded] = useState(false);
