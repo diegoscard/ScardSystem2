@@ -24,6 +24,7 @@ const pool = new Pool({
   }
 });
 
+// Broadcast and Heartbeat
 function broadcast(data: any) {
   wss.clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
@@ -31,6 +32,15 @@ function broadcast(data: any) {
     }
   });
 }
+
+// Keep-alive heartbeat (every 30s)
+setInterval(() => {
+  wss.clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify({ type: 'ping' }));
+    }
+  });
+}, 30000);
 
 async function initDB() {
   try {

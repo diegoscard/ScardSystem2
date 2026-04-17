@@ -4112,32 +4112,41 @@ const DataProvider = () => {
         setError(e instanceof Error ? e.message : String(e));
       });
 
-    // Configurar WebSocket para Sincronização em Tempo Real
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${window.location.host}`);
+    // Configurar WebSocket para Sincronização em Tempo Real com Reconexão
+    const setupWS = () => {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const ws = new WebSocket(`${protocol}//${window.location.host}`);
 
-    ws.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data);
-        if (message.type === 'update') {
-          // Atualiza o store global
-          globalStoreData[message.key] = message.data;
-          // Notifica os hooks usePersistedState para atualizarem o componente
-          window.dispatchEvent(new CustomEvent('store-update', { 
-            detail: { key: message.key, data: message.data } 
-          }));
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          if (message.type === 'update') {
+            globalStoreData[message.key] = message.data;
+            window.dispatchEvent(new CustomEvent('store-update', { 
+              detail: { key: message.key, data: message.data } 
+            }));
+          }
+        } catch (e) {
+          console.error("Erro ao processar mensagem WS:", e);
         }
-      } catch (e) {
-        console.error("Erro ao processar mensagem WS:", e);
-      }
+      };
+
+      ws.onclose = () => {
+        console.log("WebSocket desconectado. Tentando reconectar em 10 segundos...");
+        setTimeout(setupWS, 10000);
+      };
+
+      ws.onerror = (err) => {
+        console.error("Erro no WebSocket:", err);
+        ws.close();
+      };
+
+      return ws;
     };
 
-    ws.onclose = () => {
-      console.log("WebSocket desconectado. Recarregando em 5 segundos...");
-      setTimeout(() => window.location.reload(), 5000);
-    };
+    const wsInstance = setupWS();
 
-    return () => ws.close();
+    return () => wsInstance.close();
   }, []);
 
   if (error) {
