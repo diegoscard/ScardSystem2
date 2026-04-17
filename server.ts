@@ -77,6 +77,31 @@ app.post("/api/sync/:key", async (req, res) => {
 });
 
 // License Validation API
+app.post("/api/license/check-hwid", async (req, res) => {
+  try {
+    const { hwid } = req.body;
+    if (!hwid) return res.json({ valid: false });
+    
+    // Check if any active key is registered to this HWID
+    const result = await pool.query('SELECT * FROM "keys" WHERE hwid = $1 AND status = \'active\'', [hwid]);
+    
+    if (result.rows.length === 0) {
+      return res.json({ valid: false });
+    }
+
+    const license = result.rows[0];
+    
+    // Expiry check
+    if (license.expires_at && new Date(license.expires_at) < new Date()) {
+      return res.json({ valid: false });
+    }
+
+    return res.json({ valid: true });
+  } catch (error) {
+    res.status(500).json({ error: 'DB Error' });
+  }
+});
+
 app.post("/api/license/validate", async (req, res) => {
   try {
     const { key, hwid } = req.body;

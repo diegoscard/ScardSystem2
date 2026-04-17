@@ -290,7 +290,21 @@ const App = () => {
   const deviceHwid = useMemo(() => generateHWID(getDeviceFingerprint()), []);
 
   useEffect(() => {
-    // Carregamento de chaves apenas via API remota
+    // Tenta desbloquear automaticamente se o HWID deste dispositivo já possui uma chave ativa no banco
+    if (deviceHwid) {
+      fetch('/api/license/check-hwid', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hwid: deviceHwid })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.valid) {
+          setIsUnlocked(true);
+        }
+      })
+      .catch(err => console.error("Erro ao verificar sessão automática:", err));
+    }
   }, [deviceHwid]);
 
   const handleVerifyAccessKey = async (e: React.FormEvent) => {
