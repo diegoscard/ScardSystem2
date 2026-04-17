@@ -243,7 +243,14 @@ const App = () => {
   
   const usePersistedState = <T,>(key: string, initial: T): [T, React.Dispatch<React.SetStateAction<T>>] => {
     const [state, setState] = useState<T>(() => {
-      const stored = localStorage.getItem(key);
+      // Prioridade 1: Banco de Dados PG (via globalStoreData)
+      let stored = globalStoreData[key] ? JSON.stringify(globalStoreData[key]) : null;
+      
+      // Prioridade 2: Local Storage (migração de legado se não houver no banco)
+      if (!stored) {
+         stored = localStorage.getItem(key);
+      }
+      
       try {
         if (!stored) return initial;
         const parsed = JSON.parse(stored);
@@ -256,7 +263,24 @@ const App = () => {
         return initial;
       }
     });
-    useEffect(() => { localStorage.setItem(key, JSON.stringify(state)); }, [key, state]);
+
+    const isFirstRender = useRef(true);
+
+    useEffect(() => { 
+      // Sempre salvar fallback no local storage para segurança
+      localStorage.setItem(key, JSON.stringify(state)); 
+
+      // Sincronizar com banco de dados Vercel Postgres em background
+      if (!isFirstRender.current) {
+        fetch(`/api/sync/${key}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(state)
+        }).catch(err => console.error("Erro sincronizando DB Postgres", key, err));
+      }
+      isFirstRender.current = false;
+    }, [key, state]);
+
     return [state, setState];
   };
 
@@ -280,45 +304,54 @@ const App = () => {
 
   useEffect(() => {
     const savedKey = localStorage.getItem('scard_saved_access_key');
-    if (savedKey && VALID_ACCESS_KEYS.includes(savedKey)) {
-      if (keyRegistrations[savedKey] && keyRegistrations[savedKey] !== deviceHwid) {
-        localStorage.removeItem('scard_saved_access_key');
-        return;
-      }
-      setIsUnlocked(true);
+    if (savedKey) {
+      fetch('/api/license/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: savedKey, hwid: deviceHwid })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.valid) {
+          setIsUnlocked(true);
+        } else {
+          localStorage.removeItem('scard_saved_access_key');
+        }
+      })
+      .catch(() => {
+        // Fallback or handle offline
+      });
     }
-  }, [keyRegistrations, deviceHwid]);
+  }, [deviceHwid]);
 
-  const handleVerifyAccessKey = (e: React.FormEvent) => {
+  const handleVerifyAccessKey = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsValidating(true);
     const trimmedKey = accessKeyInput.trim();
 
-    setTimeout(() => {
-      if (VALID_ACCESS_KEYS.includes(trimmedKey)) {
-        const registeredHwid = keyRegistrations[trimmedKey];
-        
-        if (registeredHwid && registeredHwid !== deviceHwid) {
-          alert('ERRO DE SEGURANÇA: Esta licença/chave já está vinculada a outro dispositivo. Chaves de acesso SCARDPRO são de uso exclusivo por terminal único (HWID Lock).');
-          setIsValidating(false);
-          setAccessKeyInput('');
-          return;
-        }
-
-        if (!registeredHwid) {
-          setKeyRegistrations(prev => ({ ...prev, [trimmedKey]: deviceHwid }));
-        }
-
+    try {
+      const response = await fetch('/api/license/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: trimmedKey, hwid: deviceHwid })
+      });
+      
+      const data = await response.json();
+      
+      if (data.valid) {
         if (rememberKey) {
           localStorage.setItem('scard_saved_access_key', trimmedKey);
         }
         setIsUnlocked(true);
       } else {
-        alert('Chave de acesso inválida ou expirada. Entre em contato com o suporte SCARD.');
+        alert(data.message || 'Chave de acesso inválida.');
         setAccessKeyInput('');
       }
+    } catch (e) {
+      alert('Erro de conexão ao verificar a licença. Verifique sua rede.');
+    } finally {
       setIsValidating(false);
-    }, 1200);
+    }
   };
 
   const handleLogin = (e: React.FormEvent) => {
@@ -448,13 +481,25 @@ const App = () => {
         const encodedData = content.replace('SCARDSYS_SECURE_BKPV1:', '');
         const decodedString = decodeURIComponent(escape(atob(encodedData)));
         const data = JSON.parse(decodedString);
+        const syncPromises: Promise<any>[] = [];
+
         Object.entries(data).forEach(([key, value]) => {
           if (value !== null) {
             localStorage.setItem(key, JSON.stringify(value));
+            syncPromises.push(
+               fetch(`/api/sync/${key}`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(value)
+               }).catch(e => console.error(e))
+            );
           }
         });
-        alert("Backup restaurado com sucesso! O sistema será reiniciado.");
-        window.location.reload();
+
+        Promise.all(syncPromises).then(() => {
+           alert("Backup restaurado com sucesso! Restaurando sistema com os novos dados...");
+           window.location.reload();
+        });
       } catch (err) {
         alert("Erro ao importar: O arquivo selecionado não é um backup válido ou está corrompido.");
       }
@@ -4033,9 +4078,53 @@ const TeamViewComponent = ({ currentUser, users, setUsers }: any) => {
   );
 };
 
+export const globalStoreData: Record<string, any> = {};
+
+const DataProvider = () => {
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/sync')
+      .then(res => res.json())
+      .then(data => {
+        Object.assign(globalStoreData, data);
+        setLoaded(true);
+      })
+      .catch(e => {
+        console.error('Failed to load DB sync', e);
+        setError(true);
+      });
+  }, []);
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-6 text-center">
+        <ShieldIcon size={48} className="text-red-600 mb-4 animate-pulse"/>
+        <h1 className="text-white font-black text-xl mb-2">ERRO DE CONEXÃO COM O BANCO</h1>
+        <p className="text-zinc-400 text-sm max-w-sm">
+          Não foi possível conectar ao banco de dados Vercel Postgres. 
+          Verifique o servidor e o arquivo .env.
+        </p>
+      </div>
+    );
+  }
+
+  if (!loaded) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex flex-col gap-4 items-center justify-center p-6 text-center">
+        <div className="w-10 h-10 border-4 border-red-900 border-t-red-600 rounded-full animate-spin"></div>
+        <p className="text-red-600/50 text-[10px] uppercase font-black tracking-widest animate-pulse">Sincronizando Banco de Dados...</p>
+      </div>
+    );
+  }
+
+  return <App />;
+};
+
 const rootElement = document.getElementById('root');
 if (rootElement) {
   const root = (window as any)._root || createRoot(rootElement);
   (window as any)._root = root;
-  root.render(<App />);
+  root.render(<DataProvider />);
 }
