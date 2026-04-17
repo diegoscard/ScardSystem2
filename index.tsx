@@ -4082,18 +4082,24 @@ export const globalStoreData: Record<string, any> = {};
 
 const DataProvider = () => {
   const [loaded, setLoaded] = useState(false);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/sync')
-      .then(res => res.json())
+      .then(async (res) => {
+         if (!res.ok) {
+            const txt = await res.text();
+            throw new Error(`HTTP ${res.status} - ${txt}`);
+         }
+         return res.json();
+      })
       .then(data => {
         Object.assign(globalStoreData, data);
         setLoaded(true);
       })
       .catch(e => {
         console.error('Failed to load DB sync', e);
-        setError(true);
+        setError(e instanceof Error ? e.message : String(e));
       });
   }, []);
 
@@ -4102,10 +4108,11 @@ const DataProvider = () => {
       <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-6 text-center">
         <ShieldIcon size={48} className="text-red-600 mb-4 animate-pulse"/>
         <h1 className="text-white font-black text-xl mb-2">ERRO DE CONEXÃO COM O BANCO</h1>
-        <p className="text-zinc-400 text-sm max-w-sm">
+        <p className="text-zinc-400 text-sm max-w-sm mb-4">
           Não foi possível conectar ao banco de dados Vercel Postgres. 
           Verifique o servidor e o arquivo .env.
         </p>
+        <p className="text-red-400 font-mono text-xs max-w-lg break-all bg-red-950/50 p-4 rounded-xl border border-red-900 border-dashed">{error}</p>
       </div>
     );
   }
