@@ -16,13 +16,6 @@ import {
   Printer, Check, Key, Shield, Monitor, UserPlus, HandCoins, Share2, FileText, Target, Cake, Bike
 } from 'lucide-react';
 
-// --- CONFIGURAÇÃO DE SEGURANÇA (CHAVES DE ACESSO) ---
-const VALID_ACCESS_KEYS = [
-  'QJ4UC-6G0HA-25T07-0KK4R-SJPPA', //-- LM PARTS
-  '8FWW9-5M7VL-FQ0YS-HC3ML-QDKFJ',
-  'Master',
-];
-
 // --- UTILITÁRIOS DE SEGURANÇA DE HARDWARE ---
 
 const getDeviceFingerprint = () => {
@@ -243,13 +236,8 @@ const App = () => {
   
   const usePersistedState = <T,>(key: string, initial: T): [T, React.Dispatch<React.SetStateAction<T>>] => {
     const [state, setState] = useState<T>(() => {
-      // Prioridade 1: Banco de Dados PG (via globalStoreData)
+      // Prioridade: Banco de Dados PG (via globalStoreData)
       let stored = globalStoreData[key] ? JSON.stringify(globalStoreData[key]) : null;
-      
-      // Prioridade 2: Local Storage (migração de legado se não houver no banco)
-      if (!stored) {
-         stored = localStorage.getItem(key);
-      }
       
       try {
         if (!stored) return initial;
@@ -267,10 +255,7 @@ const App = () => {
     const isFirstRender = useRef(true);
 
     useEffect(() => { 
-      // Sempre salvar fallback no local storage para segurança
-      localStorage.setItem(key, JSON.stringify(state)); 
-
-      // Sincronizar com banco de dados Vercel Postgres em background
+      // Sincronizar EXCLUSIVAMENTE com banco de dados Vercel Postgres em background
       if (!isFirstRender.current) {
         fetch(`/api/sync/${key}`, {
           method: 'POST',
@@ -303,25 +288,7 @@ const App = () => {
   const deviceHwid = useMemo(() => generateHWID(getDeviceFingerprint()), []);
 
   useEffect(() => {
-    const savedKey = localStorage.getItem('scard_saved_access_key');
-    if (savedKey) {
-      fetch('/api/license/validate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: savedKey, hwid: deviceHwid })
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.valid) {
-          setIsUnlocked(true);
-        } else {
-          localStorage.removeItem('scard_saved_access_key');
-        }
-      })
-      .catch(() => {
-        // Fallback or handle offline
-      });
-    }
+    // Carregamento de chaves apenas via API remota
   }, [deviceHwid]);
 
   const handleVerifyAccessKey = async (e: React.FormEvent) => {
@@ -339,9 +306,6 @@ const App = () => {
       const data = await response.json();
       
       if (data.valid) {
-        if (rememberKey) {
-          localStorage.setItem('scard_saved_access_key', trimmedKey);
-        }
         setIsUnlocked(true);
       } else {
         alert(data.message || 'Chave de acesso inválida.');
@@ -412,26 +376,19 @@ const App = () => {
     setAuthMode('login');
   };
 
-  const [customers, setCustomers] = useState<Customer[]>(() => {
-    const saved = localStorage.getItem('db_customers');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('db_customers', JSON.stringify(customers));
-  }, [customers]);
+  const [customers, setCustomers] = usePersistedState<Customer[]>('db_customers', []);
 
   const handleExportBackup = () => {
     const dataKeys = [
       'db_users', 'db_products', 'db_suppliers', 'db_categories', 
       'db_movements', 'db_sales', 'db_cash_session', 'db_cash_history', 
-      'db_settings', 'db_exchange_credit', 'db_key_registrations', 'db_customers'
+      'db_settings', 'db_exchange_credit', 'db_key_registrations', 'db_customers',
+      'dash_comm_tiers'
     ];
     
     const backupData: Record<string, any> = {};
     dataKeys.forEach(key => {
-      const stored = localStorage.getItem(key);
-      backupData[key] = stored ? JSON.parse(stored) : null;
+      backupData[key] = globalStoreData[key] || null;
     });
 
     const jsonString = JSON.stringify(backupData);
@@ -485,7 +442,6 @@ const App = () => {
 
         Object.entries(data).forEach(([key, value]) => {
           if (value !== null) {
-            localStorage.setItem(key, JSON.stringify(value));
             syncPromises.push(
                fetch(`/api/sync/${key}`, {
                   method: 'POST',
@@ -2927,20 +2883,13 @@ const DashboardViewComponent = ({ products, sales, cashSession, cashHistory }: a
   
   const [commFilterMonth, setCommFilterMonth] = useState(new Date().toISOString().slice(0, 7));
   
-  const [commTiers, setCommTiers] = useState<CommissionTier[]>(() => {
-    const saved = localStorage.getItem('dash_comm_tiers');
-    return saved ? JSON.parse(saved) : [
-      { min: 0, rate: 1 },
-      { min: 20000, rate: 2 },
-      { min: 30000, rate: 3 },
-      { min: 40000, rate: 4 },
-      { min: 50000, rate: 5 }
-    ];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('dash_comm_tiers', JSON.stringify(commTiers));
-  }, [commTiers]);
+  const [commTiers, setCommTiers] = usePersistedState<CommissionTier[]>('dash_comm_tiers', [
+    { min: 0, rate: 1 },
+    { min: 20000, rate: 2 },
+    { min: 30000, rate: 3 },
+    { min: 40000, rate: 4 },
+    { min: 50000, rate: 5 }
+  ]);
 
   const filteredSales = useMemo(() => {
     return sales.filter((s: Sale) => {
