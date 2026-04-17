@@ -32,6 +32,19 @@ async function initDB() {
       );
     `);
 
+    // Create licenses table if it doesn't exist
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS licenses (
+        id SERIAL PRIMARY KEY,
+        license_key VARCHAR(255) UNIQUE NOT NULL,
+        hwid_hash VARCHAR(255),
+        status BOOLEAN DEFAULT true,
+        expiry_date TIMESTAMP,
+        linked_system VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
     // Insert hardcoded keys into DB if they don't exist yet
     const validKeys = [
       "QJ4UC-6G0HA-25T07-0KK4R-SJPPA",
