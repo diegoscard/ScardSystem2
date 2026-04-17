@@ -32,11 +32,28 @@ async function initDB() {
       );
     `);
 
-    // We do NOT create or seed the license table here anymore.
-    // The system now strictly uses db_adminkeys table managed by SCARDADMIN.
+    // Create db_adminkeys table if it doesn't exist
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "db_adminkeys" (
+        id SERIAL PRIMARY KEY,
+        key_value VARCHAR(255) UNIQUE NOT NULL,
+        hwid_hash VARCHAR(255),
+        status BOOLEAN DEFAULT true,
+        expiry_date TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Insert the key from the user image as a starting point
+    await client.query(`
+      INSERT INTO "db_adminkeys" (key_value, status)
+      VALUES ($1, true)
+      ON CONFLICT (key_value) DO NOTHING;
+    `, ['YF4H7-XVWDZ-G6ERR-7RLH3-V6TSV']);
+
+    console.log("Database initialized successfully with db_adminkeys!");
     
     client.release();
-    console.log("Database initialized successfully!");
   } catch (error) {
     console.error("Failed to initialize DB", error);
   }
