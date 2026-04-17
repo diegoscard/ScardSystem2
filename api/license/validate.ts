@@ -34,7 +34,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const result = await pool.query('SELECT * FROM "keys" WHERE key_value = $1 AND status = \'active\'', [key]);
     
     if (result.rows.length === 0) {
-      return res.status(200).json({ valid: false, message: 'Chave inválida ou inativa no banco de dados central' });
+      return res.status(200).json({ valid: false, message: 'Chave inválida ou inativa entre em contato com o suporte!' });
     }
 
     const license = result.rows[0];

@@ -297,6 +297,7 @@ const App = () => {
   const [accessKeyInput, setAccessKeyInput] = useState('');
   const [rememberKey, setRememberKey] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
+  const [authError, setAuthError] = useState('');
   
   const [user, setUser] = useState<User | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
@@ -362,6 +363,7 @@ const App = () => {
   const handleVerifyAccessKey = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsValidating(true);
+    setAuthError('');
     const trimmedKey = accessKeyInput.trim();
 
     try {
@@ -376,11 +378,11 @@ const App = () => {
       if (data.valid) {
         setIsUnlocked(true);
       } else {
-        alert(data.message || 'Chave de acesso inválida.');
+        setAuthError(data.message || 'Chave de acesso inválida.');
         setAccessKeyInput('');
       }
     } catch (e) {
-      alert('Erro de conexão ao verificar a licença. Verifique sua rede.');
+      setAuthError('Erro de conexão ao verificar a licença. Verifique sua rede.');
     } finally {
       setIsValidating(false);
     }
@@ -388,6 +390,7 @@ const App = () => {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
+    setAuthError('');
     const form = e.target as HTMLFormElement;
     const email = (form.elements.namedItem('email') as HTMLInputElement).value;
     const password = (form.elements.namedItem('password') as HTMLInputElement).value;
@@ -426,7 +429,7 @@ const App = () => {
         setCurrentView('dashboard');
       }
     } else { 
-      alert('E-mail ou senha incorretos!'); 
+      setAuthError('E-mail ou senha incorretos!'); 
     }
   };
 
@@ -626,6 +629,16 @@ const App = () => {
             <p className="text-zinc-500 font-black uppercase text-[9px] tracking-[0.3em]">Hardware Access Protection</p>
           </div>
 
+          {authError && (
+            <div className="mb-6 p-4 rounded-2xl bg-red-950/50 border border-red-900/50 animate-in fade-in slide-in-from-top-2">
+              <div className="flex items-center gap-3 justify-center text-red-500 mb-1">
+                <AlertTriangle size={16} />
+                <span className="text-[10px] font-black uppercase tracking-widest leading-none mt-0.5">Erro de Validação</span>
+              </div>
+              <p className="text-red-400/80 text-xs font-bold leading-relaxed">{authError}</p>
+            </div>
+          )}
+
           <form onSubmit={handleVerifyAccessKey} className="space-y-6">
             <div className="space-y-2 text-left">
               <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block ml-1 text-center">Insira sua Chave de Acesso</label>
@@ -682,6 +695,17 @@ const App = () => {
             <h1 className="text-5xl font-black text-zinc-800 tracking-tighter italic mb-2">SCARD<span className="text-red-600">SYS</span></h1>
             <p className="text-zinc-400 font-black uppercase text-[10px] tracking-[0.2em]">Enterprise Solution</p>
           </div>
+
+          {authError && (
+            <div className="mb-6 p-4 rounded-2xl bg-red-50 border border-red-100 animate-in fade-in slide-in-from-top-2">
+              <div className="flex items-center gap-3 justify-center text-red-600 mb-1">
+                <AlertTriangle size={16} />
+                <span className="text-[10px] font-black uppercase tracking-widest leading-none mt-0.5">Falha no Login</span>
+              </div>
+              <p className="text-red-500/80 text-xs font-bold leading-relaxed text-center">{authError}</p>
+            </div>
+          )}
+
           {authMode === 'login' ? (
             <form onSubmit={handleLogin} className="space-y-5">
               <div className="space-y-1.5">
