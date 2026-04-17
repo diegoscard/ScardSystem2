@@ -30,45 +30,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const { key, hwid } = req.body;
     
-    // Fallback: se o banco está vazio ou tabelas não criadas
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS licenses (
-        id SERIAL PRIMARY KEY,
-        license_key VARCHAR(255) UNIQUE NOT NULL,
-        hwid_hash VARCHAR(255),
-        status BOOLEAN DEFAULT true,
-        expiry_date TIMESTAMP,
-        linked_system VARCHAR(255),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    // Inserir credenciais básicas local de fallback
-    const validKeys = [
-      "QJ4UC-6G0HA-25T07-0KK4R-SJPPA",
-      "A1B2C-D3E4F-G5H6I-J7K8L-M9N0P",
-      "LK98-J32HD-19KSD-34KJD-LKS98"
-    ];
-    
-    for (const testKey of validKeys) {
-      await pool.query(`
-        INSERT INTO licenses (license_key, status) 
-        VALUES ($1, true) 
-        ON CONFLICT (license_key) DO NOTHING;
-      `, [testKey]);
-    }
-
-    const result = await pool.query('SELECT * FROM licenses WHERE license_key = $1 AND status = true', [key]);
+    // Uses ScardAdmin_chaves table managed by SCARDADMIN
+    const result = await pool.query('SELECT * FROM "ScardAdmin_chaves" WHERE license_key = $1 AND status = true', [key]);
     
     if (result.rows.length === 0) {
-      return res.status(200).json({ valid: false, message: 'Chave inválida ou inativa no banco de dados' });
+      return res.status(200).json({ valid: false, message: 'Chave inválida ou inativa no banco de dados central' });
     }
 
     const license = result.rows[0];
     
     // First time use: register HWID in hwid_hash column
     if (!license.hwid_hash) {
-      await pool.query('UPDATE licenses SET hwid_hash = $1 WHERE license_key = $2', [hwid, key]);
+      await pool.query('UPDATE "ScardAdmin_chaves" SET hwid_hash = $1 WHERE license_key = $2', [hwid, key]);
       return res.status(200).json({ valid: true });
     }
     
@@ -84,7 +57,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(200).json({ valid: true });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: 'DB Error no servidor' });
+    console.error("Erro Vercel Validate:", error);
+    return res.status(500).json({ error: 'DB Error no servidor ou tabela ScardAdmin_chaves não existe' });
   }
 }
