@@ -4,11 +4,15 @@ import { Pool } from 'pg';
 import path from 'path';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import http from 'http';
+import { WebSocketServer, WebSocket } from 'ws';
 
 dotenv.config();
 
 const app = express();
 const PORT = 3000;
+const server = http.createServer(app);
+const wss = new WebSocketServer({ server });
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
@@ -19,6 +23,14 @@ const pool = new Pool({
     rejectUnauthorized: false
   }
 });
+
+function broadcast(data: any) {
+  wss.clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify(data));
+    }
+  });
+}
 
 async function initDB() {
   try {
@@ -32,15 +44,58 @@ async function initDB() {
       );
     `);
 
-    // We do NOT create or seed the license table here anymore.
-    // The system now strictly uses keys table managed by SCARDADMIN.
-    
+    // Create session table for "No Rastro local" persistence
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS app_sessions (
+        hwid VARCHAR(255) PRIMARY KEY,
+        user_data JSONB NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
     client.release();
     console.log("Database initialized successfully!");
   } catch (error) {
     console.error("Failed to initialize DB", error);
   }
 }
+
+// Session API
+app.post("/api/auth/session", async (req, res) => {
+  try {
+    const { hwid, user } = req.body;
+    if (!hwid) return res.status(400).json({ error: 'Missing HWID' });
+    
+    if (user) {
+      await pool.query(`
+        INSERT INTO app_sessions (hwid, user_data, updated_at)
+        VALUES ($1, $2, CURRENT_TIMESTAMP)
+        ON CONFLICT (hwid) DO UPDATE SET user_data = EXCLUDED.user_data, updated_at = CURRENT_TIMESTAMP;
+      `, [hwid, JSON.stringify(user)]);
+      return res.json({ success: true });
+    } else {
+      // Logout - remove session
+      await pool.query('DELETE FROM app_sessions WHERE hwid = $1', [hwid]);
+      return res.json({ success: true });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Session Error' });
+  }
+});
+
+app.get("/api/auth/session/:hwid", async (req, res) => {
+  try {
+    const { hwid } = req.params;
+    const result = await pool.query('SELECT user_data FROM app_sessions WHERE hwid = $1', [hwid]);
+    if (result.rows.length > 0) {
+      res.json({ user: result.rows[0].user_data });
+    } else {
+      res.json({ user: null });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Session Error' });
+  }
+});
 
 // Global data loading API
 app.get("/api/health", (req, res) => {
@@ -70,6 +125,10 @@ app.post("/api/sync/:key", async (req, res) => {
       VALUES ($1, $2)
       ON CONFLICT (store_key) DO UPDATE SET data = EXCLUDED.data;
     `, [key, JSON.stringify(body)]);
+    
+    // Broadcast update to all clients
+    broadcast({ type: 'update', key, data: body });
+    
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'DB Error' });
@@ -156,7 +215,7 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  server.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }

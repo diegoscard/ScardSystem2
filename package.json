@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "tsc && vite build && esbuild server.ts --bundle --platform=node --target=node18 --outfile=dist/server.cjs --external:express --external:pg --external:cors --external:dotenv --external:typescript --external:vite",
+    "build": "tsc && vite build && esbuild server.ts --bundle --platform=node --target=node18 --outfile=dist/server.cjs --external:express --external:pg --external:cors --external:dotenv --external:typescript --external:vite --external:ws",
     "start": "NODE_ENV=production node dist/server.cjs",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@types/ws": "^8.18.1",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
@@ -19,6 +20,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tsx": "^4.21.0",
+    "ws": "^8.20.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

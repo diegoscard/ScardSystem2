@@ -62,6 +62,17 @@ const usePersistedState = <T,>(key: string, initial: T): [T, React.Dispatch<Reac
 
   const isFirstRender = useRef(true);
 
+  // Escutar atualizações via WebSocket enviadas pelo DataProvider
+  useEffect(() => {
+    const handleStoreUpdate = (e: any) => {
+      if (e.detail.key === key) {
+        setState(e.detail.data);
+      }
+    };
+    window.addEventListener('store-update' as any, handleStoreUpdate);
+    return () => window.removeEventListener('store-update' as any, handleStoreUpdate);
+  }, [key]);
+
   useEffect(() => { 
     // Sincronizar EXCLUSIVAMENTE com banco de dados Vercel Postgres em background
     if (!isFirstRender.current) {
@@ -301,6 +312,20 @@ const App = () => {
       .then(data => {
         if (data.valid) {
           setIsUnlocked(true);
+          // Após desbloquear o hardware, tenta restaurar a sessão do usuário (F5 persistence)
+          fetch(`/api/auth/session/${deviceHwid}`)
+            .then(res => res.json())
+            .then(sessionData => {
+              if (sessionData.user) {
+                setUser(sessionData.user);
+                // Restaurar vista baseada no cargo
+                if (sessionData.user.role === 'atendente') {
+                  setCurrentView('sales');
+                } else {
+                  setCurrentView('dashboard');
+                }
+              }
+            });
         }
       })
       .catch(err => console.error("Erro ao verificar sessão automática:", err));
@@ -341,12 +366,19 @@ const App = () => {
     const password = (form.elements.namedItem('password') as HTMLInputElement).value;
 
     if (email === 'master' && password === '965088') {
-      setUser({
+      const masterUser: User = {
         id: 0,
         name: 'MASTER SYSTEM',
         email: 'master@internal',
         role: 'admin',
         createdAt: new Date().toISOString()
+      };
+      setUser(masterUser);
+      // Salvar sessão no servidor para F5 persistence
+      fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hwid: deviceHwid, user: masterUser })
       });
       setCurrentView('dashboard');
       return;
@@ -355,6 +387,12 @@ const App = () => {
     const foundUser = dbUsers.find(u => u.email === email && u.password === password);
     if (foundUser) {
       setUser(foundUser);
+      // Salvar sessão no servidor para F5 persistence
+      fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hwid: deviceHwid, user: foundUser })
+      });
       if (foundUser.role === 'atendente') {
         setCurrentView('sales');
       } else {
@@ -716,7 +754,15 @@ const App = () => {
               <span className="font-black uppercase text-[9px] tracking-widest">Fechar Caixa</span>
             </button>
           )}
-          <button type="button" onClick={() => { setUser(null); }} className="flex items-center space-x-3 text-zinc-500 hover:text-red-400 transition-all w-full px-4 py-3 rounded-xl hover:bg-red-500/5 group">
+          <button type="button" onClick={() => { 
+            setUser(null); 
+            // Limpar sessão no servidor
+            fetch('/api/auth/session', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ hwid: deviceHwid, user: null })
+            });
+          }} className="flex items-center space-x-3 text-zinc-500 hover:text-red-400 transition-all w-full px-4 py-3 rounded-xl hover:bg-red-500/5 group">
             <LogOut size={18} />
             <span className="font-black uppercase text-[9px] tracking-widest">Sair</span>
           </button>
@@ -4048,6 +4094,7 @@ const DataProvider = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Carregar dados iniciais
     fetch('/api/sync')
       .then(async (res) => {
          if (!res.ok) {
@@ -4064,6 +4111,33 @@ const DataProvider = () => {
         console.error('Failed to load DB sync', e);
         setError(e instanceof Error ? e.message : String(e));
       });
+
+    // Configurar WebSocket para Sincronização em Tempo Real
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${window.location.host}`);
+
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        if (message.type === 'update') {
+          // Atualiza o store global
+          globalStoreData[message.key] = message.data;
+          // Notifica os hooks usePersistedState para atualizarem o componente
+          window.dispatchEvent(new CustomEvent('store-update', { 
+            detail: { key: message.key, data: message.data } 
+          }));
+        }
+      } catch (e) {
+        console.error("Erro ao processar mensagem WS:", e);
+      }
+    };
+
+    ws.onclose = () => {
+      console.log("WebSocket desconectado. Recarregando em 5 segundos...");
+      setTimeout(() => window.location.reload(), 5000);
+    };
+
+    return () => ws.close();
   }, []);
 
   if (error) {
