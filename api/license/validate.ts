@@ -30,8 +30,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const { key, hwid } = req.body;
     
-    // Uses db_adminkeys table
-    const result = await pool.query('SELECT * FROM "db_adminkeys" WHERE "Keys" = $1 AND status = true', [key]);
+    // Uses the new "keys" table according to the image
+    const result = await pool.query('SELECT * FROM "keys" WHERE key_value = $1 AND status = \'active\'', [key]);
     
     if (result.rows.length === 0) {
       return res.status(200).json({ valid: false, message: 'Chave inválida ou inativa no banco de dados central' });
@@ -39,25 +39,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const license = result.rows[0];
     
-    // First time use: register HWID in hwid_hash column
-    if (!license.hwid_hash) {
-      await pool.query('UPDATE "db_adminkeys" SET hwid_hash = $1 WHERE "Keys" = $2', [hwid, key]);
+    // First time use: register HWID in "hwid" column
+    if (!license.hwid) {
+      await pool.query('UPDATE "keys" SET hwid = $1 WHERE key_value = $2', [hwid, key]);
       return res.status(200).json({ valid: true });
     }
     
     // Validate existing HWID
-    if (license.hwid_hash !== hwid) {
+    if (license.hwid !== hwid) {
       return res.status(200).json({ valid: false, message: 'Chave já registrada em outro dispositivo' });
     }
 
-    // Expiry check
-    if (license.expiry_date && new Date(license.expiry_date) < new Date()) {
+    // Expiry check - using "expires_at" from the image
+    if (license.expires_at && new Date(license.expires_at) < new Date()) {
       return res.status(200).json({ valid: false, message: 'Licença expirada' });
     }
 
     return res.status(200).json({ valid: true });
   } catch (error) {
     console.error("Erro Vercel Validate:", error);
-    return res.status(500).json({ error: 'DB Error no servidor ou tabela db_adminkeys não existe' });
+    return res.status(500).json({ error: 'DB Error no servidor ou tabela keys não existe' });
   }
 }
