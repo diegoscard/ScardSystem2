@@ -441,7 +441,7 @@ const App = () => {
     const password = (form.elements.namedItem('regPassword') as HTMLInputElement).value;
 
     if (dbUsers.some(u => u.email === email)) {
-      alert('E-mail já cadastrado!');
+      setAuthError('E-mail já cadastrado!');
       return;
     }
 
@@ -455,7 +455,7 @@ const App = () => {
     };
 
     setDbUsers([...dbUsers, newUser]);
-    alert(`Usuário ${name} cadastrado com sucesso! Agora faça login.`);
+    setAuthError('Usuário cadastrado com sucesso! Faça login.');
     form.reset();
     setAuthMode('login');
   };
@@ -537,11 +537,11 @@ const App = () => {
         });
 
         Promise.all(syncPromises).then(() => {
-           alert("Backup restaurado com sucesso! Restaurando sistema com os novos dados...");
-           window.location.reload();
+           setAuthError("Backup restaurado! Recarregando sistema...");
+           setTimeout(() => window.location.reload(), 2000);
         });
       } catch (err) {
-        alert("Erro ao importar: O arquivo selecionado não é um backup válido ou está corrompido.");
+        setAuthError("Erro ao importar: O arquivo é inválido ou está corrompido.");
       }
     };
     reader.readAsText(file);
@@ -557,7 +557,7 @@ const App = () => {
       const previousClosingBalance = lastSession.closingBalance;
       
       if (Math.abs(amount - previousClosingBalance) > 0.01) {
-        alert(`BLOQUEIO DE ABERTURA: O saldo inicial informado (R$ ${formatCurrency(amount)}) NÃO confere com o saldo de fechamento da sessão anterior (R$ ${formatCurrency(previousClosingBalance)}). Por favor, verifique o saldo físico e informe o valor correto.`);
+        setAuthError(`BLOQUEIO: Saldo inicial (R$ ${formatCurrency(amount)}) não confere com o fechamento anterior (R$ ${formatCurrency(previousClosingBalance)}).`);
         return;
       }
     }
