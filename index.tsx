@@ -1256,24 +1256,61 @@ const CustomerManagementView = ({ customers, setCustomers, sales, settings }: an
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [isSearchingCEP, setIsSearchingCEP] = useState(false);
 
+  const getOfflineCEPFallback = (cep: string) => {
+    const prefix = parseInt(cep.substring(0, 2), 10);
+    let uf = 'BR';
+    let region = 'Região Não Identificada';
+
+    if (prefix >= 1 && prefix <= 19) { uf = 'SP'; region = 'São Paulo'; }
+    else if (prefix >= 20 && prefix <= 28) { uf = 'RJ'; region = 'Rio de Janeiro'; }
+    else if (prefix === 29) { uf = 'ES'; region = 'Espírito Santo'; }
+    else if (prefix >= 30 && prefix <= 39) { uf = 'MG'; region = 'Minas Gerais'; }
+    else if (prefix >= 40 && prefix <= 48) { uf = 'BA'; region = 'Bahia'; }
+    else if (prefix === 49) { uf = 'SE'; region = 'Sergipe'; }
+    else if (prefix >= 50 && prefix <= 56) { uf = 'PE'; region = 'Pernambuco'; }
+    else if (prefix === 57) { uf = 'AL'; region = 'Alagoas'; }
+    else if (prefix === 58) { uf = 'PB'; region = 'Paraíba'; }
+    else if (prefix === 59) { uf = 'RN'; region = 'Rio Grande do Norte'; }
+    else if (prefix >= 60 && prefix <= 63) { uf = 'CE'; region = 'Ceará'; }
+    else if (prefix === 64) { uf = 'PI'; region = 'Piauí'; }
+    else if (prefix === 65) { uf = 'MA'; region = 'Maranhão'; }
+    else if (prefix >= 66 && prefix <= 68) { uf = 'PA'; region = 'Pará'; }
+    else if (prefix === 69) { uf = 'AM/AC/RR/AP'; region = 'Norte'; }
+    else if (prefix >= 70 && prefix <= 72) { uf = 'DF'; region = 'Brasília'; }
+    else if (prefix >= 73 && prefix <= 76) { uf = 'GO'; region = 'Goiás'; }
+    else if (prefix === 77) { uf = 'TO'; region = 'Tocantins'; }
+    else if (prefix >= 78 && prefix <= 78) { uf = 'MT'; region = 'Mato Grosso'; }
+    else if (prefix === 79) { uf = 'MS'; region = 'Mato Grosso do Sul'; }
+    else if (prefix >= 80 && prefix <= 87) { uf = 'PR'; region = 'Paraná'; }
+    else if (prefix >= 88 && prefix <= 89) { uf = 'SC'; region = 'Santa Catarina'; }
+    else if (prefix >= 90 && prefix <= 99) { uf = 'RS'; region = 'Rio Grande do Sul'; }
+
+    return `Estado: ${uf}, ${region} (Edite com sua Rua/Bairro)`;
+  };
+
   const handleCEPLookup = async (cep: string) => {
     const cleanCEP = cep.replace(/\D/g, '');
     if (cleanCEP.length === 8) {
       setIsSearchingCEP(true);
       try {
-        const response = await fetch(`https://viacep.com.br/ws/${cleanCEP}/json/`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000); 
+
+        const response = await fetch(`https://viacep.com.br/ws/${cleanCEP}/json/`, { signal: controller.signal });
+        clearTimeout(timeoutId);
         const data = await response.json();
+        
         if (!data.erro) {
           setForm((prev: any) => ({
             ...prev,
             address: `${data.logradouro}, ${data.bairro}, ${data.localidade} - ${data.uf}`
           }));
         } else {
-          alert('CEP não encontrado.');
+          setForm((prev: any) => ({ ...prev, address: getOfflineCEPFallback(cleanCEP) }));
         }
       } catch (error) {
-        console.error('Erro ao buscar CEP:', error);
-        alert('Erro ao buscar CEP. Verifique sua conexão.');
+        console.warn('ViaCEP indisponível ou timeout. Usando fallback offline.');
+        setForm((prev: any) => ({ ...prev, address: getOfflineCEPFallback(cleanCEP) }));
       } finally {
         setIsSearchingCEP(false);
       }
@@ -1660,12 +1697,12 @@ const CustomerManagementView = ({ customers, setCustomers, sales, settings }: an
                   </div>
                 </div>
                 <div className="col-span-2 space-y-1">
-                  <label className="text-[9px] font-black text-zinc-400 uppercase ml-1">Endereço (Via CEP)</label>
+                  <label className="text-[9px] font-black text-zinc-400 uppercase ml-1">Endereço (Via CEP / Edição Liberada)</label>
                   <textarea 
-                    readOnly
-                    className="w-full rounded-xl border-2 border-zinc-100 px-4 py-3 text-zinc-500 bg-zinc-100 outline-none transition-all font-bold text-xs shadow-sm min-h-[60px] cursor-not-allowed"
+                    className="w-full rounded-xl border-2 border-zinc-100 px-4 py-3 text-zinc-800 bg-zinc-50 focus:border-red-500 outline-none transition-all font-bold text-xs shadow-sm min-h-[60px]"
                     value={form.address || ''}
-                    placeholder="O endereço aparecerá aqui após digitar o CEP"
+                    onChange={e => setForm({ ...form, address: e.target.value })}
+                    placeholder="O endereço aparecerá aqui. Pode ser editado livremente."
                   />
                 </div>
               </div>
